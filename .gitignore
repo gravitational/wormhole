@@ -1,0 +1,15 @@
+.vscode
+.vagrant
+build
+*.test
+flymake*
+*tar
+*gz
+*tar.gz
+*tgz
+*.swp
+# Terraform state
+.terraform
+terraform.tfstate*
+# Ansible retry files
+*.retry

@@ -1,13 +1,19 @@
 # TODO: Docs / License
 
 .DEFAULT_GOAL := build
-mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
-current_dir := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
+
 ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
+export
+
+define mage
+	go run mage.go $(1)
+endef
 
 .PHONY: build
 build:
-	docker build \
-	-t quay.io/gravitational/wormhole:latest \
-	$(ROOT_DIR)
+	$(call mage,build:all)
+
+.PHONY: mage
+mage:
+	$(call mage,$(filter-out $@,$(MAKECMDGOALS)))
