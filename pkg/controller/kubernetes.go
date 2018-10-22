@@ -30,11 +30,11 @@ import (
 
 type kubernetesSync struct {
 	logrus.FieldLogger
-	*Daemon
+	*Controller
 }
 
 func (d *kubernetesSync) init() {
-	d.FieldLogger = d.Daemon.FieldLogger.WithField("module", "k8s-sync")
+	d.FieldLogger = d.Controller.FieldLogger.WithField("module", "k8s-sync")
 }
 
 func (d *kubernetesSync) start(ctx context.Context) {
@@ -58,8 +58,8 @@ func (d *kubernetesSync) start(ctx context.Context) {
 		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 	)
 
-	d.Daemon.nodeController = controller
-	d.Daemon.nodeList = listers.NewNodeLister(indexer)
+	d.Controller.nodeController = controller
+	d.Controller.nodeList = listers.NewNodeLister(indexer)
 
 	go d.run(ctx)
 
@@ -71,7 +71,7 @@ func (d *kubernetesSync) run(ctx context.Context) {
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
-	go d.Daemon.nodeController.Run(stopCh)
+	go d.Controller.nodeController.Run(stopCh)
 
 	<-ctx.Done()
 }
@@ -198,7 +198,7 @@ func (d *kubernetesSync) waitForNodeControllerSync(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			if d.Daemon.nodeController.HasSynced() {
+			if d.Controller.nodeController.HasSynced() {
 				return nil
 			}
 		case <-ctx.Done():

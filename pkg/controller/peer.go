@@ -87,11 +87,11 @@ func (n Peer) Equals(other Peer) bool {
 	return cmp.Equal(n, other)
 }
 
-func (d *Daemon) RemovePeer(peer Peer) error {
+func (d *Controller) RemovePeer(peer Peer) error {
 	return trace.Wrap(wireguard.RemovePeer(d.WireguardIface, peer.PublicKey))
 }
 
-func (d *Daemon) AddPeer(peer Peer) error {
+func (d *Controller) AddPeer(peer Peer) error {
 
 	return trace.Wrap(wireguard.AddPeer(
 		d.WireguardIface, peer.PublicKey, d.sharedKey, peer.AllowedCIDRString(), peer.Address.String()))

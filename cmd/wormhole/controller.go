@@ -105,7 +105,7 @@ func runController(cmd *cobra.Command, args []string) error {
 		return trace.Wrap(err)
 	}
 
-	controller := &controller.Daemon{
+	controller := &controller.Controller{
 		FieldLogger:    logger,
 		NodeName:       nodeName,
 		OverlayCIDR:    overlayCIDR,

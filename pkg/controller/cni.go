@@ -21,7 +21,7 @@ import (
 	"github.com/gravitational/trace"
 )
 
-func (d *Daemon) configureCNI() error {
+func (d *Controller) configureCNI() error {
 	conf := map[string]interface{}{
 		"cniVersion": "0.3.1",
 		"name":       "wormhole",

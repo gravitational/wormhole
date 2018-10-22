@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (d Daemon) getOrSetPSK() (string, error) {
+func (d Controller) getOrSetPSK() (string, error) {
 	d.Debug("Syncing PSK with cluster.")
 	// Secret creation is based on first writer wins.
 	// So, generate a new secret, and try and send it to the kubernetes API
@@ -61,7 +61,7 @@ func (d Daemon) getOrSetPSK() (string, error) {
 	return string(binSecret), nil
 }
 
-func (d Daemon) generateKeypair() (string, string, error) {
+func (d Controller) generateKeypair() (string, string, error) {
 	d.Debug("Generating wireguard keypair.")
 	key, err := wireguard.GenKey()
 	if err != nil {

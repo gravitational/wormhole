@@ -26,11 +26,11 @@ import (
 
 type wireguardSync struct {
 	logrus.FieldLogger
-	*Daemon
+	*Controller
 }
 
 func (d *wireguardSync) init() {
-	d.FieldLogger = d.Daemon.FieldLogger.WithField("module", "wireguard-sync")
+	d.FieldLogger = d.Controller.FieldLogger.WithField("module", "wireguard-sync")
 }
 
 // wireguard controller, monitors the local wireguard interface, and resyncs with the kubernetes cache
@@ -72,7 +72,7 @@ func (d *wireguardSync) syncWireguardWithK8s() error {
 	}
 
 	// get the peers from k8s, and convert to a map indexed by public key
-	nodes, err := d.Daemon.nodeList.List(labels.Everything())
+	nodes, err := d.Controller.nodeList.List(labels.Everything())
 	if err != nil {
 		return trace.Wrap(err)
 	}

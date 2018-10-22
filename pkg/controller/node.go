@@ -36,7 +36,7 @@ var annotationPatchTemplate = `[
 	{"op": "{{.PortOp}}", "path": "/metadata/annotations/wireguard-port", "value":"{{.PortValue}}"}
 ]`
 
-func (d *Daemon) publishPublicKey() error {
+func (d *Controller) publishPublicKey() error {
 	node, err := d.nodeClient.CoreV1().Nodes().Get(d.NodeName, metav1.GetOptions{})
 	if err != nil {
 		return trace.Wrap(err)
@@ -87,7 +87,7 @@ func (d *Daemon) publishPublicKey() error {
 	return nil
 }
 
-func (d *Daemon) updateNodeNameFromPod(podName, podNamespace string) error {
+func (d *Controller) updateNodeNameFromPod(podName, podNamespace string) error {
 	pod, err := d.nodeClient.CoreV1().Pods(podNamespace).Get(podName, metav1.GetOptions{})
 	if err != nil {
 		return trace.Wrap(err)
@@ -99,7 +99,7 @@ func (d *Daemon) updateNodeNameFromPod(podName, podNamespace string) error {
 	return nil
 }
 
-func (d *Daemon) getPodCIDR() error {
+func (d *Controller) getPodCIDR() error {
 	d.Debug("Attempting to retrieve pod CIDR from k8s IPAM.")
 	node, err := d.nodeClient.CoreV1().Nodes().Get(d.NodeName, metav1.GetOptions{})
 	if err != nil {

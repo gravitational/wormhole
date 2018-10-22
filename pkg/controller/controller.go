@@ -31,7 +31,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type Daemon struct {
+type Controller struct {
 	logrus.FieldLogger
 
 	// NodeName is the name of the k8s node this instance is running on
@@ -74,7 +74,7 @@ type Daemon struct {
 	nodeList       listers.NodeLister
 }
 
-func (d *Daemon) init(nodeKubeconfig, wormKubeconfig string) error {
+func (d *Controller) init(nodeKubeconfig, wormKubeconfig string) error {
 	var err error
 	d.nodeClient, err = getClientsetFromKubeconfig(nodeKubeconfig)
 	if err != nil {
@@ -118,8 +118,8 @@ func getClientsetFromKubeconfig(path string) (*kubernetes.Clientset, error) {
 	return clientset, nil
 }
 
-func (d *Daemon) Run(ctx context.Context, nodeKubeconfig, wormKubeconfig string) error {
-	d.Info("Starting wormhole daemon with config: ", spew.Sdump(d))
+func (d *Controller) Run(ctx context.Context, nodeKubeconfig, wormKubeconfig string) error {
+	d.Info("Starting wormhole Controller with config: ", spew.Sdump(d))
 
 	err := d.init(nodeKubeconfig, wormKubeconfig)
 	if err != nil {
@@ -146,7 +146,7 @@ func (d *Daemon) Run(ctx context.Context, nodeKubeconfig, wormKubeconfig string)
 	return nil
 }
 
-func (d *Daemon) startup(ctx context.Context) error {
+func (d *Controller) startup(ctx context.Context) error {
 	d.Info("Starting Wormhole...")
 	var err error
 	if d.NodeName == "" {
@@ -207,12 +207,12 @@ func (d *Daemon) startup(ctx context.Context) error {
 	}
 
 	kubernetesSync := kubernetesSync{
-		Daemon: d,
+		Controller: d,
 	}
 	kubernetesSync.start(ctx)
 
 	wireguardSync := wireguardSync{
-		Daemon: d,
+		Controller: d,
 	}
 	err = wireguardSync.start(ctx)
 	if err != nil {
@@ -222,7 +222,7 @@ func (d *Daemon) startup(ctx context.Context) error {
 	return nil
 }
 
-func (d *Daemon) detectNodeName() error {
+func (d *Controller) detectNodeName() error {
 	d.Debug("Attempting to detect nodename.")
 	defer func() { d.Info("Detected hostname: ", d.NodeName) }()
 	// if we're running inside a pod
