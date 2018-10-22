@@ -31,10 +31,25 @@ var (
 
 var (
 	outputFormat = "text"
+	debug        = false
+	logger       = logrus.New()
 )
 
+func init() {
+	rootCmd.Flags().BoolVarP(
+		&debug,
+		"debug",
+		"",
+		debug,
+		"Enable debug logging",
+	)
+}
+
 func main() {
-	logrus.SetLevel(logrus.DebugLevel)
+	if debug {
+		logger.SetLevel(logrus.DebugLevel)
+	}
+
 	if err := rootCmd.Execute(); err != nil {
 		os.Stderr.Write([]byte(trace.DebugReport(err)))
 		os.Exit(1)

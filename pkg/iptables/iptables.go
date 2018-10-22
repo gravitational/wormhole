@@ -25,6 +25,10 @@ import (
 	"github.com/gravitational/trace"
 )
 
+const (
+	WormholeAntispoofingChain = "WORMHOLE-ANTISPOOFING"
+)
+
 type Config struct {
 	logrus.FieldLogger
 
@@ -32,6 +36,9 @@ type Config struct {
 	OverlayCIDR string
 	// PodCIDR is the local pod network range
 	PodCIDR string
+
+	WireguardIface string
+	BridgeIface    string
 
 	iptables *iptables.IPTables
 }
@@ -92,40 +99,65 @@ func (c *Config) generateRules() []rule {
 	// Don't nat any traffic with source and destination within the overlay network
 	rules = append(rules,
 		rule{"nat", "POSTROUTING", []string{"-s", c.OverlayCIDR, "-d", c.OverlayCIDR, "-j", "RETURN"},
-			"wormhole - don't nat overlay traffic"},
+			"wormhole: accept overlay->overlay"},
 	)
 
 	// Nat all other traffic
 	if c.iptables.HasRandomFully() {
 		rules = append(rules,
 			rule{"nat", "POSTROUTING", []string{"-s", c.PodCIDR, "-j", "MASQUERADE", "--random-fully"},
-				"wormhole - nat pod traffic leaving the host"},
+				"wormhole: nat overlay->internet"},
 		)
 	} else {
 		rules = append(rules,
 			rule{"nat", "POSTROUTING", []string{"-s", c.PodCIDR, "-j", "MASQUERADE"},
-				"wormhole - nat pod traffic leaving the host"},
+				"wormhole: nat overlay->internet"},
 		)
 	}
 
 	// Don't nat traffic from external hosts to local pods (preserves source IP when using externalTrafficPolicy=local)
 	rules = append(rules,
 		rule{"nat", "POSTROUTING", []string{"-d", c.PodCIDR, "-j", "RETURN"},
-			"wormhole - preserve source ip for local pods"},
+			"wormhole: preserve source-ip"},
 	)
 
 	// Masquerade traffic if we're forwarding it to another host
 	if c.iptables.HasRandomFully() {
 		rules = append(rules,
 			rule{"nat", "POSTROUTING", []string{"-d", c.OverlayCIDR, "-j", "MASQUERADE", "--random-fully"},
-				"wormhole - nat overlay traffic"},
+				"wormhole: nat internet->overlay"},
 		)
 	} else {
 		rules = append(rules,
 			rule{"nat", "POSTROUTING", []string{"-d", c.OverlayCIDR, "-j", "MASQUERADE"},
-				"wormhole - nat overlay traffic"},
+				"wormhole: nat internet->overlay"},
 		)
 	}
+
+	//
+	// Anti-spoofing, prevent tricking a host into routing traffic, if received on an unexpected interface
+	// Traffic that is from the overlay network range, should only have source interfaces of the linux
+	// bridge / wireguard / lo interfaces. Traffic entering on any other interface should be dropped.
+	//
+
+	rules = append(rules,
+		rule{"filter", WormholeAntispoofingChain, []string{"-i", c.BridgeIface, "-s", c.PodCIDR, "-j", "RETURN"},
+			"wormhole: antispoofing"},
+		// Wireguard will enforce the source address per peer, so just allow everything in the range
+		rule{"filter", WormholeAntispoofingChain, []string{"-i", c.WireguardIface, "-s", c.OverlayCIDR, "-j", "RETURN"},
+			"wormhole: antispoofing"},
+		// TODO: why is traffic getting marked to the local interface when testing locally
+		rule{"filter", WormholeAntispoofingChain, []string{"-i", "lo", "-j", "RETURN"},
+			"wormhole: antispoofing"},
+		rule{"filter", WormholeAntispoofingChain, []string{"-j", "DROP"},
+			"wormhole: drop spoofed traffic"},
+	)
+	rules = append(rules,
+		rule{"filter", "FORWARD", []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain},
+			"wormhole: check antispoofing"},
+		rule{"filter", "INPUT", []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain},
+			"wormhole: check antispoofing"},
+	)
 
 	return rules
 }
@@ -154,15 +186,25 @@ func (c *Config) cleanupRules() {
 			c.Info("Delete rule failed: ", err)
 		}
 	}
+
+	err := c.iptables.DeleteChain("filter", WormholeAntispoofingChain)
+	if err != nil {
+		c.Info("Delete chain ", WormholeAntispoofingChain, " failed: ", err)
+	}
 }
 
 func (c *Config) createRules() error {
+	err := c.iptables.ClearChain("filter", WormholeAntispoofingChain)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	for _, rule := range c.generateRules() {
 		log.Info("Adding iptables rule: table: ", rule.table, " chain: ", rule.chain, " spec: ",
 			strings.Join(rule.getRule(), " "))
 
 		// ignore and log errors in delete, which are likely caused by the rule not existing
-		err := c.iptables.AppendUnique(rule.table, rule.chain, rule.getRule()...)
+		err = c.iptables.AppendUnique(rule.table, rule.chain, rule.getRule()...)
 		if err != nil {
 			return trace.Wrap(err)
 		}

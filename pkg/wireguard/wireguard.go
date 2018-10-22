@@ -123,7 +123,7 @@ func SetIP(iface, ip string) error {
 	))
 }
 
-func SetListenPort(iface string, port uint16) error {
+func SetListenPort(iface string, port int) error {
 	return trace.ConvertSystemError(sh.Run(
 		"wg",
 		"set",
@@ -175,7 +175,7 @@ func RemovePeer(iface, peerPublicKey string) error {
 	))
 }
 
-func AddPeer(iface, peerPublicKey, sharedKey, subnet, endpoint, port string) error {
+func AddPeer(iface, peerPublicKey, sharedKey, subnet, endpoint string) error {
 	// it looks like wireguard only accepts key's by file
 	// so we'll need to write the key to a file, load into wireguard
 	// then delete it
@@ -194,7 +194,7 @@ func AddPeer(iface, peerPublicKey, sharedKey, subnet, endpoint, port string) err
 		"allowed-ips",
 		subnet,
 		"endpoint",
-		fmt.Sprint(endpoint, ":", port),
+		endpoint,
 		"preshared-key",
 		tmpFile.Name(),
 		"persistent-keepalive",
@@ -212,7 +212,7 @@ type PeerStatus struct {
 	Keepalive     int
 }
 
-func GetPeerStatus(iface string) ([]PeerStatus, error) {
+func GetPeerStatus(iface string) (map[string]PeerStatus, error) {
 	o, err := sh.Output(
 		"wg",
 		"show",
@@ -223,7 +223,7 @@ func GetPeerStatus(iface string) ([]PeerStatus, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	results := make([]PeerStatus, 0)
+	results := make(map[string]PeerStatus)
 
 	for _, line := range strings.Split(o, "\n")[1:] {
 		c := strings.Split(line, "\t")
@@ -257,7 +257,7 @@ func GetPeerStatus(iface string) ([]PeerStatus, error) {
 			}
 		}
 
-		results = append(results, PeerStatus{
+		results[c[0]] = PeerStatus{
 			PublicKey:     c[0],
 			Endpoint:      replaceNone(c[2]),
 			AllowedIP:     replaceNone(c[3]),
@@ -265,7 +265,7 @@ func GetPeerStatus(iface string) ([]PeerStatus, error) {
 			BytesTX:       bytesTX,
 			BytesRX:       bytesRX,
 			Keepalive:     keepAlive,
-		})
+		}
 
 	}
 

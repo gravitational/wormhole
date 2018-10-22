@@ -25,6 +25,7 @@ import (
 	"github.com/gravitational/trace"
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
+	"github.com/magefile/mage/target"
 )
 
 var (
@@ -32,13 +33,16 @@ var (
 	buildContainer = "golang:1.11.1"
 
 	golangciVersion = "v1.10.1"
+
+	// cniVersion is the version of cni plugin binaries to ship
+	cniVersion = "v0.7.1"
 )
 
 type Build mg.Namespace
 
 // Build is main entrypoint to build the project
 func (Build) All() error {
-	mg.Deps(Build.Go, Build.Docker)
+	mg.Deps(Build.Go)
 
 	return nil
 }
@@ -49,7 +53,16 @@ func (Build) Go() error {
 	fmt.Println("\n=====> Building Gravitational Wormhole Go Binary...\n")
 	start := time.Now()
 
-	err := trace.Wrap(sh.RunV(
+	updated, err := target.Dir("build/wormhole", "pkg", "cmd")
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	if !updated {
+		fmt.Println("Build up to date")
+		return nil
+	}
+	err = trace.Wrap(sh.RunV(
 		"docker",
 		"run",
 		"-it",
@@ -70,7 +83,7 @@ func (Build) Go() error {
 	elapsed := time.Since(start)
 	fmt.Println("Build completed in ", elapsed)
 
-	return err
+	return trace.Wrap(err)
 }
 
 // DockerBuild builds a docker image for this project
@@ -82,10 +95,25 @@ func (Build) Docker() error {
 		"docker",
 		"build",
 		"--tag",
-		fmt.Sprint("wormhole:", version()),
+		fmt.Sprint("quay.io/gravitational/wormhole:", version()),
+		"--build-arg",
+		fmt.Sprint("CNI_VERSION=", cniVersion),
+		"--build-arg",
+		"ARCH=amd64",
 		"-f",
 		"Dockerfile",
 		".",
+	))
+}
+
+func (Build) Publish() error {
+	mg.Deps(Build.Docker)
+	fmt.Println("\n=====> Publishing Gravitational Wormhole Docker Image...\n")
+
+	return trace.Wrap(sh.RunV(
+		"docker",
+		"push",
+		fmt.Sprint("quay.io/gravitational/wormhole:", version()),
 	))
 }
 
@@ -175,6 +203,7 @@ func flags() string {
 		fmt.Sprint(`-X "main.timestamp=`, timestamp, `"`),
 		fmt.Sprint(`-X "main.commitHash=`, hash, `"`),
 		fmt.Sprint(`-X "main.gitTag=`, version, `"`),
+		"-s -w", // shrink the binary
 	}
 
 	return strings.Join(flags, " ")

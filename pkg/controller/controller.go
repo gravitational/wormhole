@@ -11,10 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package daemon
+package controller
 
 import (
 	"context"
+	"os"
+
+	"github.com/davecgh/go-spew/spew"
 
 	"github.com/gravitational/wormhole/pkg/iptables"
 	"github.com/gravitational/wormhole/pkg/wireguard"
@@ -23,12 +26,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	listers "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
-)
-
-const (
-	DefaultWireguardIface = "wormhole0"
 )
 
 type Daemon struct {
@@ -40,25 +40,35 @@ type Daemon struct {
 	// OverlayCIDR is the IP network CIDR for the entire overlay network
 	OverlayCIDR string
 
+	// Port is the external port wireguard should listen on for tunnels
+	Port int
+
+	// WireguardIface is the name of the wireguard interface to create
+	WireguardIface string
+
+	// BridgeIface is the name of the bridge to create
+	BridgeIface string
+
 	// nodeClient is a kubernetes client for accessing the nodes own object
 	nodeClient *kubernetes.Clientset
 	// wireguardClient is a kubernetes client for accessing wireguard related config
 	wormholeClient *kubernetes.Clientset
 
-	publicKey   string
-	sharedKey   string
+	// publicKey is the public key of this node
+	publicKey string
+	// sharedKey is the shared key of this cluster
+	sharedKey string
+
+	// nodePodCIDR is the cidr range for pods on this host from IPAM
 	nodePodCIDR string
-
-	podGateway      string
+	// podGateway is the gateway address to use for pods
+	podGateway string
+	// wormholeGateway is the gateway for overlay traffic
 	wormholeGateway string
-	podRangeStart   string
-	podRangeEnd     string
-	// Iface is the wireguard interface name
-	Iface string
-
-	// kubernetes controller/informer
-	controller cache.Controller
-	cache      cache.Store
+	// podRangeStart is the start of the ip range to assign to pods
+	podRangeStart string
+	// podRangeEnd is the end of the ip range to assign to pods
+	podRangeEnd string
 
 	nodeController cache.Controller
 	nodeList       listers.NodeLister
@@ -71,15 +81,27 @@ func (d *Daemon) init(nodeKubeconfig, wormKubeconfig string) error {
 		return trace.Wrap(err)
 	}
 
-	d.wormholeClient, err = getClientsetFromKubeconfig(wormKubeconfig)
-	if err != nil {
-		return trace.Wrap(err)
+	if wormKubeconfig != "" {
+		d.wormholeClient, err = getClientsetFromKubeconfig(wormKubeconfig)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+	} else {
+		clusterConfig, err := rest.InClusterConfig()
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		d.wormholeClient, err = kubernetes.NewForConfig(clusterConfig)
+		if err != nil {
+			return trace.Wrap(err)
+		}
 	}
 
-	if d.Iface == "" {
-		d.Iface = DefaultWireguardIface
-	}
 	return nil
+}
+
+func runningInPod() bool {
+	return os.Getenv("POD_NAME") != ""
 }
 
 func getClientsetFromKubeconfig(path string) (*kubernetes.Clientset, error) {
@@ -97,6 +119,8 @@ func getClientsetFromKubeconfig(path string) (*kubernetes.Clientset, error) {
 }
 
 func (d *Daemon) Run(ctx context.Context, nodeKubeconfig, wormKubeconfig string) error {
+	d.Info("Starting wormhole daemon with config: ", spew.Sdump(d))
+
 	err := d.init(nodeKubeconfig, wormKubeconfig)
 	if err != nil {
 		return trace.Wrap(err)
@@ -108,9 +132,11 @@ func (d *Daemon) Run(ctx context.Context, nodeKubeconfig, wormKubeconfig string)
 	}
 
 	iptablesSync := iptables.Config{
-		FieldLogger: d.FieldLogger.WithField("module", "iptables"),
-		OverlayCIDR: d.OverlayCIDR,
-		PodCIDR:     d.nodePodCIDR,
+		FieldLogger:    d.FieldLogger.WithField("module", "iptables"),
+		OverlayCIDR:    d.OverlayCIDR,
+		PodCIDR:        d.nodePodCIDR,
+		WireguardIface: d.WireguardIface,
+		BridgeIface:    d.BridgeIface,
 	}
 	err = iptablesSync.Run(ctx)
 	if err != nil {
@@ -162,17 +188,17 @@ func (d *Daemon) startup(ctx context.Context) error {
 	// configure wireguard
 	// TODO(knisbet) right now, I'm just ignoring errors in the setup
 	// but this needs to eventually be handled properly
-	wireguard.CreateInterface(d.Iface)
-	wireguard.SetIP(d.Iface, d.wormholeGateway)
-	wireguard.SetPrivateKey(d.Iface, privKey)
-	wireguard.SetListenPort(d.Iface, 9806) // TODO: (knisbet) make port configurable
-	wireguard.SetUp(d.Iface)
+	_ = wireguard.CreateInterface(d.WireguardIface)
+	_ = wireguard.SetIP(d.WireguardIface, d.wormholeGateway)
+	_ = wireguard.SetPrivateKey(d.WireguardIface, privKey)
+	_ = wireguard.SetListenPort(d.WireguardIface, d.Port)
+	_ = wireguard.SetUp(d.WireguardIface)
 
 	if d.OverlayCIDR == "" {
 		// TODO (implement reading overlay cidr from network)
 		return trace.NotImplemented("OverlayCIDR detection not implemented")
 	}
-	wireguard.SetRoute(d.Iface, d.OverlayCIDR)
+	_ = wireguard.SetRoute(d.WireguardIface, d.OverlayCIDR)
 
 	// configure CNI on the host
 	err = d.configureCNI()
@@ -180,11 +206,38 @@ func (d *Daemon) startup(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	d.startNodeController(ctx)
-	err = d.startWireguardController(ctx)
+	kubernetesSync := kubernetesSync{
+		Daemon: d,
+	}
+	kubernetesSync.start(ctx)
+
+	wireguardSync := wireguardSync{
+		Daemon: d,
+	}
+	err = wireguardSync.start(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
+	return nil
+}
+
+func (d *Daemon) detectNodeName() error {
+	d.Debug("Attempting to detect nodename.")
+	defer func() { d.Info("Detected hostname: ", d.NodeName) }()
+	// if we're running inside a pod
+	// find the node the pod is assigned to
+	podName := os.Getenv("POD_NAME")
+	podNamespace := os.Getenv("POD_NAMESPACE")
+	if podName != "" && podNamespace != "" {
+		return trace.Wrap(d.updateNodeNameFromPod(podName, podNamespace))
+	}
+
+	nodeName, err := os.Hostname()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	// TODO(knisbet) we should probably validate here, a node object exists that matches our node name
+	d.NodeName = nodeName
 	return nil
 }

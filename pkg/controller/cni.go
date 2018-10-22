@@ -11,11 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package daemon
+package controller
 
 import (
 	"encoding/json"
 	"io/ioutil"
+	"path/filepath"
 
 	"github.com/gravitational/trace"
 )
@@ -27,13 +28,13 @@ func (d *Daemon) configureCNI() error {
 		"plugins": []map[string]interface{}{
 			{
 				"type":             "bridge",
-				"bridge":           "wormhole-br0",
+				"bridge":           d.BridgeIface,
 				"isGateway":        true,
 				"isDefaultGateway": true,
 				"forceAddress":     false,
 				"ipMasq":           false,
 				"hairpinMode":      true,
-				"mtu":              65535, // TODO(knisbet) properly detect MTU
+				"mtu":              65535, // TODO(knisbet) is setting max MTU on the bridge wise?
 				"ipam": map[string]interface{}{
 					"type": "host-local",
 					"ranges": [][]map[string]string{
@@ -47,6 +48,12 @@ func (d *Daemon) configureCNI() error {
 					},
 				},
 			},
+			{
+				"type": "portmap",
+				"capabilities": map[string]interface{}{
+					"portMappings": true,
+				},
+			},
 		},
 	}
 
@@ -55,7 +62,11 @@ func (d *Daemon) configureCNI() error {
 		return trace.Wrap(err)
 	}
 
-	err = ioutil.WriteFile("/etc/cni/net.d/wormhole.conflist", jsonConf, 0644)
+	path := "/etc/cni/net.d/wormhole.conflist"
+	if runningInPod() {
+		path = filepath.Join("/host", path)
+	}
+	err = ioutil.WriteFile(path, jsonConf, 0644)
 	if err != nil {
 		return trace.Wrap(err)
 	}
