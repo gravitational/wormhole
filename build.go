@@ -17,7 +17,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -36,7 +35,18 @@ var (
 
 	// cniVersion is the version of cni plugin binaries to ship
 	cniVersion = "v0.7.1"
+
+	// registryImage is the docker tag to use to push the container to the requested registry
+	registryImage = env("WORM_REGISTRY_IMAGE", "quay.io/gravitational/wormhole")
 )
+
+// env, loads a variable from the environment, or uses the provided default
+func env(env, d string) string {
+	if os.Getenv(env) != "" {
+		return os.Getenv(env)
+	}
+	return d
+}
 
 type Build mg.Namespace
 
@@ -95,7 +105,7 @@ func (Build) Docker() error {
 		"docker",
 		"build",
 		"--tag",
-		fmt.Sprint("quay.io/gravitational/wormhole:", version()),
+		fmt.Sprint("wormhole:", version()),
 		"--build-arg",
 		fmt.Sprint("CNI_VERSION=", cniVersion),
 		"--build-arg",
@@ -110,22 +120,24 @@ func (Build) Publish() error {
 	mg.Deps(Build.Docker)
 	fmt.Println("\n=====> Publishing Gravitational Wormhole Docker Image...\n")
 
+	err := sh.RunV(
+		"docker",
+		"tag",
+		fmt.Sprint("wormhole:", version()),
+		fmt.Sprint(registryImage, ":", version()),
+	)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	return trace.Wrap(sh.RunV(
 		"docker",
 		"push",
-		fmt.Sprint("quay.io/gravitational/wormhole:", version()),
+		fmt.Sprint(registryImage, ":", version()),
 	))
 }
 
 func (Build) BuildContainer() error {
-
-	fmt.Println("\n=====> Building Gravitational Wormhole Build Container...\n")
-	dir, err := ioutil.TempDir("", "")
-	if err != nil {
-		return trace.ConvertSystemError(err)
-	}
-	defer os.RemoveAll(dir)
-	fmt.Println("Using temp directory: ", dir)
 
 	return trace.Wrap(sh.RunV(
 		"docker",
@@ -138,14 +150,14 @@ func (Build) BuildContainer() error {
 		fmt.Sprint("GOLANGCI_VER=", golangciVersion),
 		"-f",
 		"Dockerfile.build",
-		dir,
+		"./assets",
 	))
 }
 
 type Test mg.Namespace
 
 func (Test) All() error {
-	mg.Deps(Test.Unit)
+	mg.Deps(Test.Unit, Test.Lint)
 	return nil
 }
 
@@ -171,7 +183,7 @@ func (Test) Unit() error {
 }
 
 // Lint runs golangci linter against the repo
-func Lint() error {
+func (Test) Lint() error {
 	mg.Deps(Build.BuildContainer)
 	fmt.Println("\n=====> Linting Gravitational Wormhole...\n")
 
