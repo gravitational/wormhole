@@ -156,6 +156,12 @@ func (d *Controller) startup(ctx context.Context) error {
 		}
 	}
 
+	err = d.loadOverlayCidr()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	d.Info("OverlayCidr: ", d.OverlayCIDR)
+
 	psk, err := d.getOrSetPSK()
 	if err != nil {
 		return trace.Wrap(err)

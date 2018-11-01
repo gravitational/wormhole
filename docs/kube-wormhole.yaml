@@ -43,6 +43,14 @@ rules:
       - create
     resourceNames:
 #      - wormhole
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+    resourceNames:
+      - kubeadm-config
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
