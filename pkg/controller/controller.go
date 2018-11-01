@@ -161,17 +161,15 @@ func (d *Controller) startup(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 	d.sharedKey = psk
-	// TODO(knisbet) security!!! remove logging of secrets
-	d.Info("PSK: ", psk)
+	d.Info("PSK: <redacted>")
 
 	pubKey, privKey, err := d.generateKeypair()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	d.publicKey = pubKey
-	// TODO(knisbet) security!!! remove logging of secrets
 	d.Info("PubKey: ", pubKey)
-	d.Info("PrivKey: ", privKey)
+	d.Info("PrivKey: <redacted>")
 
 	// send our new public key to the cluster
 	err = d.publishPublicKey()

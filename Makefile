@@ -14,13 +14,17 @@ endef
 build:
 	$(call mage,build:all)
 
+.PHONY: publish
+publish:
+	$(call mage,build:publish)
+
 .PHONY: mage
 mage:
 	$(call mage,$(filter-out $@,$(MAKECMDGOALS)))
 
 .PHONY: lint
 lint:
-	$(call mage,lint)
+	$(call mage,test:lint)
 
 .PHONY: test
 test:

@@ -180,11 +180,11 @@ func (d *kubernetesSync) handleNodeDeleted(obj interface{}) {
 	// ignore ok, just use "" as key if the annotation is missing
 	publicKey := node.Annotations[annotationWireguardPublicKey]
 	if publicKey == "" {
-		l.Info("Unknown peer %v/%v", node.Name, publicKey)
+		l.Infof("Unknown peer %v/%v", node.Name, publicKey)
 		return
 	}
 
-	l.Info("Removing peer %v/%v", node.Name, publicKey)
+	l.Infof("Removing peer %v/%v", node.Name, publicKey)
 
 	err := wireguard.RemovePeer(d.WireguardIface, publicKey)
 	if err != nil {
