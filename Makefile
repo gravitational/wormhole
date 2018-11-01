@@ -17,3 +17,11 @@ build:
 .PHONY: mage
 mage:
 	$(call mage,$(filter-out $@,$(MAKECMDGOALS)))
+
+.PHONY: lint
+lint:
+	$(call mage,lint)
+
+.PHONY: test
+test:
+	$(call mage,test:all)
