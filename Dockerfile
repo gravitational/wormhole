@@ -30,5 +30,6 @@ RUN curl -L --retry 5 https://github.com/containernetworking/plugins/releases/do
     | tar -xz -C /opt/cni/bin ./bridge ./loopback ./host-local ./portmap ./tuning
 
 ADD build/wormhole /wormhole
+ADD docs/gravity-wormhole.yaml /gravity-wormhole.yaml
 
 CMD ["/wormhole"]  
