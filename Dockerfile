@@ -6,6 +6,8 @@ RUN apt-get update && \
     apt-get install --no-install-recommends -y \
     wireguard
 
+FROM quay.io/gravitational/rig:5.3.1 as rig
+
 
 FROM ubuntu:18.10
 
@@ -22,6 +24,17 @@ RUN apt-get update && \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+#
+# Install/Upgrade/Rollback interactions for a gravity cluster
+#
+ARG CHANGESET
+ENV RIG_CHANGESET $CHANGESET
+COPY --from=rig /usr/local/bin/rig /usr/bin/rig
+ADD docs/gravity-wormhole.yaml /gravity/wormhole.yaml
+ADD scripts/gravity* /gravity/
+RUN chmod +x /gravity/gravity*
+
+
 COPY --from=wireguard /usr/bin/wg /usr/bin/wg
 
 # Get a copy of CNI plugins, so we can copy them to the host
@@ -30,6 +43,5 @@ RUN curl -L --retry 5 https://github.com/containernetworking/plugins/releases/do
     | tar -xz -C /opt/cni/bin ./bridge ./loopback ./host-local ./portmap ./tuning
 
 ADD build/wormhole /wormhole
-ADD docs/gravity-wormhole.yaml /gravity-wormhole.yaml
 
 CMD ["/wormhole"]  

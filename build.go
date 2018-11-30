@@ -110,6 +110,8 @@ func (Build) Docker() error {
 		fmt.Sprint("CNI_VERSION=", cniVersion),
 		"--build-arg",
 		"ARCH=amd64",
+		"--build-arg",
+		fmt.Sprint("CHANGESET=", version()),
 		"-f",
 		"Dockerfile",
 		".",
