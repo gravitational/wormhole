@@ -237,3 +237,11 @@ func version() string {
 	}
 	return s
 }
+
+func changeset() string {
+	s, _ := sh.Output("git", "describe", "--tags")
+	if s == "" {
+		s = "dev"
+	}
+	return s
+}
