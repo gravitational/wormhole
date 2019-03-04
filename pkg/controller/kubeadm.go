@@ -14,6 +14,12 @@ limitations under the License.
 package controller
 
 import (
+	"bufio"
+	"bytes"
+	"io/ioutil"
+	"strconv"
+	"strings"
+
 	"github.com/gravitational/trace"
 	yaml "gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,9 +30,16 @@ func (d *Controller) loadOverlayCidr() error {
 	if d.OverlayCIDR != "" {
 		return nil
 	}
-	d.Info("Attempting to retrieve overlayCIDR from cluster")
-	return trace.Wrap(d.loadOverlayCidrFromKubeadm())
 
+	d.Info("Attempting to retrieve overlayCIDR from cluster")
+	err := d.loadOverlayCidrFromPlanet()
+	if err != nil {
+		d.Info("Unable to load overlay network from planet: ", trace.DebugReport(err))
+	} else {
+		return nil
+	}
+
+	return trace.Wrap(d.loadOverlayCidrFromKubeadm())
 }
 
 type kubeadmClusterConfiguration struct {
@@ -59,4 +72,34 @@ func (d *Controller) loadOverlayCidrFromKubeadm() error {
 
 	return trace.BadParameter("Unable to locate networking.podSubnet in kubeadm config: %v",
 		config.Data["ClusterConfiguration"])
+}
+
+func (d *Controller) loadOverlayCidrFromPlanet() error {
+	d.Info("Attempting to retrieve overlayCIDR from planet")
+	env, err := ioutil.ReadFile("/etc/container-environment")
+	if err != nil {
+		return trace.ConvertSystemError(err)
+	}
+	scanner := bufio.NewScanner(bytes.NewReader(env))
+	for scanner.Scan() {
+		keyVal := strings.SplitN(scanner.Text(), "=", 2)
+		if len(keyVal) != 2 {
+			continue
+		}
+
+		if keyVal[0] == "KUBE_POD_SUBNET" {
+			// the value may be quoted (if the file was previously written by WriteEnvironment above)
+			val, err := strconv.Unquote(keyVal[1])
+			if err != nil {
+				return trace.Wrap(err)
+			}
+			d.OverlayCIDR = val
+			return nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return trace.Wrap(err)
+	}
+	return trace.NotFound("Unable to locate KUBE_POD_SUBET env variable in /host/etc/container-environment")
+
 }

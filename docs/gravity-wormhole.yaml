@@ -148,7 +148,7 @@ spec:
         # Run a wormhole container on each node
         # Configures wireguard / CNI on each node
         - name: wormhole
-          image: quay.io/gravitational/wormhole:dev
+          image: leader.telekube.local:5000/gravitational/wormhole:__REPLACE_VERSION__
           command:
             - /wormhole
           args:
@@ -185,6 +185,8 @@ spec:
               name: kubelet-kubeconfig
             - mountPath: /var/state
               name: gravity-state
+            - mountPath: /host/etc/container-environment
+              name: container-environment
       volumes:
         # Used to install CNI.
         - name: cni-bin-dir
@@ -202,3 +204,6 @@ spec:
         - name: gravity-state
           hostPath:
             path: /var/state
+        - name: container-environment
+          hostPath:
+            path: /etc/container-environment
