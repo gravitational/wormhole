@@ -79,7 +79,7 @@ func (Build) Go() error {
 		"--rm=true",
 		fmt.Sprintf("--volume=%v:/go/src/github.com/gravitational/wormhole:delegated", srcDir()),
 		`--env="GOCACHE=/go/src/github.com/gravitational/wormhole/build/cache/go"`,
-		"wormhole-build:dev",
+		fmt.Sprint("wormhole-build:", version()),
 		"go",
 		"--",
 		"build",
@@ -104,12 +104,15 @@ func (Build) Docker() error {
 	return trace.Wrap(sh.RunV(
 		"docker",
 		"build",
+		"--pull",
 		"--tag",
 		fmt.Sprint("wormhole:", version()),
 		"--build-arg",
 		fmt.Sprint("CNI_VERSION=", cniVersion),
 		"--build-arg",
 		"ARCH=amd64",
+		"--build-arg",
+		fmt.Sprint("VERSION=", version()),
 		"-f",
 		"Dockerfile",
 		".",
@@ -142,8 +145,9 @@ func (Build) BuildContainer() error {
 	return trace.Wrap(sh.RunV(
 		"docker",
 		"build",
+		"--pull",
 		"--tag",
-		"wormhole-build:dev",
+		fmt.Sprint("wormhole-build:", version()),
 		"--build-arg",
 		fmt.Sprint("BUILD_IMAGE=", buildContainer),
 		"--build-arg",
@@ -173,7 +177,7 @@ func (Test) Unit() error {
 		fmt.Sprintf("--volume=%v:/go/src/github.com/gravitational/wormhole", srcDir()),
 		`--env="GOCACHE=/go/src/github.com/gravitational/wormhole/build/cache/go"`,
 		`-w=/go/src/github.com/gravitational/wormhole/`,
-		"wormhole-build:dev",
+		fmt.Sprint("wormhole-build:", version()),
 		"go",
 		"--",
 		"test",
@@ -194,7 +198,7 @@ func (Test) Lint() error {
 		"--rm=true",
 		fmt.Sprintf("--volume=%v:/go/src/github.com/gravitational/wormhole", srcDir()),
 		`--env="GOCACHE=/go/src/github.com/gravitational/wormhole/build/cache/go"`,
-		"wormhole-build:dev",
+		fmt.Sprint("wormhole-build:", version()),
 		"golangci-lint",
 		"run",
 		"--enable-all",
@@ -229,9 +233,8 @@ func hash() string {
 
 // version returns the git tag for the current branch or "" if none.
 func version() string {
-	s, _ := sh.Output("git", "describe", "--tags")
-	if s == "" {
-		s = "dev"
-	}
-	return s
+	//shortTag, _ := sh.Output("git", "describe", "--tags", "--abbrev=0")
+	longTag, _ := sh.Output("git", "describe", "--tags", "--dirty")
+
+	return longTag
 }
