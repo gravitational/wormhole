@@ -57,7 +57,5 @@ func main() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "wormhole",
-	Short: "",
-	Long:  ``,
+	Use: "wormhole",
 }

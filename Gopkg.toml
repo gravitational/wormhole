@@ -29,3 +29,7 @@ required = ["github.com/magefile/mage/mage"]
 [prune]
   go-tests = true
   unused-packages = true
+
+[[constraint]]
+  name = "github.com/vishvananda/netlink"
+  version = "1.0.0"

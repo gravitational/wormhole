@@ -14,192 +14,32 @@ limitations under the License.
 package wireguard
 
 import (
-	"bytes"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"os"
-	"os/exec"
-	"strconv"
-	"strings"
+	"net"
 	"time"
 
+	"github.com/vishvananda/netlink"
+
 	"github.com/gravitational/trace"
-	"github.com/magefile/mage/sh"
+	"github.com/prometheus/common/log"
+	"github.com/sirupsen/logrus"
 )
 
-func GenKey() (string, error) {
-	key, err := sh.Output("wg", "genkey")
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-	return key, nil
+type Config struct {
+	// InterfaceName is the name of the wireguard interface to manage
+	InterfaceName string
+	// IP Address to assign to the interface
+	IP string
+	// External Port to have wireguard listen on
+	Port int
+	// OverlayNetworks is the IP range(s) for the entire overlay network
+	OverlayNetworks []net.IPNet
 }
 
-func GenPSK() (string, error) {
-	key, err := sh.Output("wg", "genpsk")
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-	return key, nil
-}
-
-func PubKey(key string) (string, error) {
-	c := exec.Command("wg", "pubkey")
-	c.Env = os.Environ()
-	c.Stderr = os.Stderr
-
-	stdin, err := c.StdinPipe()
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-
-	stdout := &bytes.Buffer{}
-	c.Stdout = stdout
-
-	err = c.Start()
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-
-	_, err = io.WriteString(stdin, key)
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-	stdin.Close()
-
-	err = c.Wait()
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-
-	return strings.TrimSuffix(stdout.String(), "\n"), nil
-}
-
-func SetPrivateKey(iface, key string) error {
-	// it looks like wireguard only accepts key's by file
-	// so we'll need to write the key to a file, load into wireguard
-	// then delete it
-	tmpFile, err := ioutil.TempFile(os.TempDir(), "")
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	_, err = tmpFile.Write([]byte(key))
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	return trace.ConvertSystemError(sh.Run(
-		"wg",
-		"set",
-		iface,
-		"private-key",
-		tmpFile.Name(),
-	))
-}
-
-func CreateInterface(iface string) error {
-	return trace.ConvertSystemError(sh.Run(
-		"ip",
-		"link",
-		"add",
-		"dev",
-		iface,
-		"type",
-		"wireguard",
-	))
-}
-
-func SetIP(iface, ip string) error {
-	return trace.ConvertSystemError(sh.Run(
-		"ip",
-		"address",
-		"add",
-		"dev",
-		iface,
-		ip,
-	))
-}
-
-func SetListenPort(iface string, port int) error {
-	return trace.ConvertSystemError(sh.Run(
-		"wg",
-		"set",
-		iface,
-		"listen-port",
-		fmt.Sprint(port),
-	))
-}
-
-func SetUp(iface string) error {
-	return trace.ConvertSystemError(sh.Run(
-		"ip",
-		"link",
-		"set",
-		"up",
-		iface,
-	))
-}
-
-func SetDown(iface string) error {
-	return trace.ConvertSystemError(sh.Run(
-		"ip",
-		"link",
-		"set",
-		"down",
-		iface,
-	))
-}
-
-func SetRoute(iface, route string) error {
-	return trace.ConvertSystemError(sh.Run(
-		"ip",
-		"route",
-		"add",
-		route,
-		"dev",
-		iface,
-	))
-}
-
-func RemovePeer(iface, peerPublicKey string) error {
-	return trace.ConvertSystemError(sh.Run(
-		"wg",
-		"set",
-		iface,
-		"peer",
-		peerPublicKey,
-		"remove",
-	))
-}
-
-func AddPeer(iface, peerPublicKey, sharedKey, subnet, endpoint string) error {
-	// it looks like wireguard only accepts key's by file
-	// so we'll need to write the key to a file, load into wireguard
-	// then delete it
-	tmpFile, err := ioutil.TempFile(os.TempDir(), "")
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	return trace.ConvertSystemError(sh.Run(
-		"wg",
-		"set",
-		iface,
-		"peer",
-		peerPublicKey,
-		"allowed-ips",
-		subnet,
-		"endpoint",
-		endpoint,
-		"preshared-key",
-		tmpFile.Name(),
-		"persistent-keepalive",
-		"15",
-	))
+type Peer struct {
+	PublicKey string
+	SharedKey string
+	AllowedIP []string
+	Endpoint  string
 }
 
 type PeerStatus struct {
@@ -212,69 +52,193 @@ type PeerStatus struct {
 	Keepalive     int
 }
 
-func GetPeerStatus(iface string) (map[string]PeerStatus, error) {
-	o, err := sh.Output(
-		"wg",
-		"show",
-		iface,
-		"dump",
-	)
+type Interface interface {
+	PublicKey() string
+	SyncPeers(map[string]Peer)
+	GenerateSharedKey() (string, error)
+}
+
+type iface struct {
+	logrus.FieldLogger
+	Config
+
+	publicKey string
+	wg        Wg
+}
+
+func New(config Config) (Interface, error) {
+	err := config.CheckAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	results := make(map[string]PeerStatus)
-
-	for _, line := range strings.Split(o, "\n")[1:] {
-		c := strings.Split(line, "\t")
-		if len(c) != 8 {
-			return nil, trace.BadParameter("Unexpected number of columns in wg show: %v", c)
-		}
-
-		handshakeTime := time.Time{}
-		if c[4] != "" {
-			i, err := strconv.ParseInt(c[4], 10, 64)
-			if err != nil {
-				return nil, trace.WrapWithMessage(err, "Error parsing int64: %v", c[4])
-			}
-			handshakeTime = time.Unix(i, 0)
-		}
-
-		bytesRX, err := strconv.ParseInt(c[5], 10, 64)
-		if err != nil {
-			return nil, trace.WrapWithMessage(err, "Error parsing int64: %v", c[4])
-		}
-		bytesTX, err := strconv.ParseInt(c[6], 10, 64)
-		if err != nil {
-			return nil, trace.WrapWithMessage(err, "Error parsing int64: %v", c[4])
-		}
-
-		var keepAlive int
-		if c[7] != "off" {
-			keepAlive, err = strconv.Atoi(c[7])
-			if err != nil {
-				return nil, trace.WrapWithMessage(err, "Error parsing int64: %v", c[4])
-			}
-		}
-
-		results[c[0]] = PeerStatus{
-			PublicKey:     c[0],
-			Endpoint:      replaceNone(c[2]),
-			AllowedIP:     replaceNone(c[3]),
-			LastHandshake: handshakeTime,
-			BytesTX:       bytesTX,
-			BytesRX:       bytesRX,
-			Keepalive:     keepAlive,
-		}
-
+	wg := &wg{
+		iface: config.InterfaceName,
 	}
 
-	return results, nil
+	iface, err := new(config, wg)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	// retrieve the wireguard netlink device
+	link, err := netlink.LinkByName(config.InterfaceName)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	// add overlay network routes towards the wireguard interface
+	// TODO(knisbet) consider making this part of the control loop, so that if the system is changed for any reason
+	// the routes will get re-created
+	for _, network := range config.OverlayNetworks {
+		netlink.RouteAdd(&netlink.Route{
+			LinkIndex: link.Attrs().Index,
+			Dst:       &network,
+		})
+	}
+
+	return iface, nil
+
 }
 
-func replaceNone(s string) string {
-	if s == "(none)" {
-		return ""
+func new(config Config, wg Wg) (*iface, error) {
+	key, err := wg.genKey()
+	if err != nil {
+		return nil, trace.Wrap(err)
 	}
-	return s
+
+	pubKey, err := wg.pubKey(key)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	err = wg.createInterface()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	err = wg.setIP(config.IP)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	err = wg.setPrivateKey(key)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	err = wg.setListenPort(config.Port)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	err = wg.setUp()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return &iface{
+		FieldLogger: logrus.WithField(trace.Component, "iface"),
+		publicKey:   pubKey,
+		wg:          wg,
+	}, nil
+}
+
+func (c *Config) CheckAndSetDefaults() error {
+	if c.InterfaceName == "" {
+		return trace.BadParameter("Interface name is required")
+	}
+	if c.IP == "" {
+		return trace.BadParameter("IP address is required")
+	}
+	if c.Port == 0 {
+		return trace.BadParameter("Port is required")
+	}
+
+	_, ipv4Net, err := net.ParseCIDR(c.IP)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	// only ipv4 is currently supported
+	if ipv4Net.IP.To4() == nil {
+		return trace.BadParameter("%v is not an ipv4 subnet", c.IP)
+	}
+
+	return nil
+}
+
+func (i iface) PublicKey() string {
+	return i.publicKey
+}
+
+func (i iface) SyncPeers(peers map[string]Peer) {
+	i.Debug("Syncing peers to wireguard.")
+
+	// get the peers that are locally configured within wireguard
+	peerStatuses, err := i.wg.getPeers()
+	if err != nil {
+		i.Warn("Error reading peers from wireguard.")
+		return
+	}
+
+	// iterate through each peer, and find the corresponding desired peer
+	// peer = local wireguard peer
+	// desiredPeer = peer as per k8s API
+	for _, peerStatus := range peerStatuses {
+		desiredPeer, ok := peers[peerStatus.PublicKey]
+		if ok {
+			// if there is a difference in the peer, delete and re-add the peer
+			if !peerStatus.ToPeer().Equals(desiredPeer) {
+				log := i.WithField("peer", desiredPeer.PublicKey)
+				log.Info("Re-creating peer.")
+
+				err = i.wg.removePeer(peerStatus.PublicKey)
+				if err != nil {
+					log.Warn("Error removing peer: ", trace.DebugReport(err))
+				}
+
+				err = i.wg.addPeer(desiredPeer)
+				if err != nil {
+					log.Warn("Error recreating peer: ", trace.DebugReport(err))
+				}
+			}
+		} else {
+			// peer doesn't exist in desired peers, so we should delete from wireguard
+
+			log := i.WithField("peer", peerStatus.PublicKey)
+			log.Infof("Deletining unexpected peer: %+v", peerStatus.ToPeer())
+
+			err = i.wg.removePeer(peerStatus.PublicKey)
+			if err != nil {
+				log.Warn("Error recreating peer: ", trace.DebugReport(err))
+			}
+		}
+	}
+
+	// iterate over each desired peer, looking for a peer missing in wireguard
+	for _, desiredPeer := range peers {
+		if _, ok := peerStatuses[desiredPeer.PublicKey]; !ok {
+			err = i.wg.addPeer(desiredPeer)
+			if err != nil {
+				log.Warn("Error creating peer: ", trace.DebugReport(err))
+			}
+		}
+	}
+
+	i.Debug("Syncing peers to wireguard complete.")
+}
+
+func (i iface) AddPeer(peer Peer) error {
+	log := i.WithField("peer", peer.PublicKey)
+	log.Infof("Adding peer: %+v", peer)
+
+	return trace.Wrap(i.wg.addPeer(peer))
+}
+
+func (i iface) RemovePeer(publicKey string) error {
+	log := i.WithField("peer", publicKey)
+	log.Info("Removing peer.")
+
+	return trace.Wrap(i.wg.removePeer(publicKey))
 }

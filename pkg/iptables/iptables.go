@@ -139,6 +139,8 @@ func (c *Config) generateRules() []rule {
 	// Traffic that is from the overlay network range, should only have source interfaces of the linux
 	// bridge / wireguard / lo interfaces. Traffic entering on any other interface should be dropped.
 	//
+	// TODO(knisbet) look into whether it's possible for one pod to spoof another pod on the same host, and
+	// whether we need iptable rules per pod (veth entry) to prevent this.
 
 	rules = append(rules,
 		rule{"filter", WormholeAntispoofingChain, []string{"-i", c.BridgeIface, "-s", c.PodCIDR, "-j", "RETURN"},
@@ -152,6 +154,8 @@ func (c *Config) generateRules() []rule {
 		rule{"filter", WormholeAntispoofingChain, []string{"-j", "DROP"},
 			"wormhole: drop spoofed traffic"},
 	)
+
+	// Join the Forward / Input chains
 	rules = append(rules,
 		rule{"filter", "FORWARD", []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain},
 			"wormhole: check antispoofing"},

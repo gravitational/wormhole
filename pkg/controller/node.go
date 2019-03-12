@@ -13,19 +13,6 @@ limitations under the License.
 
 package controller
 
-import (
-	"bytes"
-	"fmt"
-	"net"
-	"strconv"
-	"text/template"
-
-	"github.com/gravitational/trace"
-	"k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-)
-
 const (
 	annotationWireguardPublicKey = "wireguard-public-key"
 	annotationWireguardPort      = "wireguard-port"
@@ -36,8 +23,9 @@ var annotationPatchTemplate = `[
 	{"op": "{{.PortOp}}", "path": "/metadata/annotations/wireguard-port", "value":"{{.PortValue}}"}
 ]`
 
-func (d *Controller) publishPublicKey() error {
-	node, err := d.nodeClient.CoreV1().Nodes().Get(d.NodeName, metav1.GetOptions{})
+/*
+func (d *controller) publishPublicKey() error {
+	node, err := d.nodeClient.CoreV1().Nodes().Get(d.config.NodeName, metav1.GetOptions{})
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -51,7 +39,7 @@ func (d *Controller) publishPublicKey() error {
 		KeyOp:     "add",
 		KeyValue:  d.publicKey,
 		PortOp:    "add",
-		PortValue: fmt.Sprint(d.Port),
+		PortValue: fmt.Sprint(d.config.Port),
 	}
 
 	if _, ok := node.Annotations[annotationWireguardPublicKey]; ok {
@@ -76,8 +64,8 @@ func (d *Controller) publishPublicKey() error {
 	// generate a patching error.
 	// but it's acceptable for now
 
-	d.WithField("node", d.NodeName).Info("Publishing public key: ", patch.String())
-	_, err = d.nodeClient.CoreV1().Nodes().Patch(d.NodeName, types.JSONPatchType, patch.Bytes())
+	d.WithField("node", d.config.NodeName).Info("Publishing public key: ", patch.String())
+	_, err = d.nodeClient.CoreV1().Nodes().Patch(d.config.NodeName, types.JSONPatchType, patch.Bytes())
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -87,27 +75,17 @@ func (d *Controller) publishPublicKey() error {
 	return nil
 }
 
-func (d *Controller) updateNodeNameFromPod(podName, podNamespace string) error {
-	pod, err := d.nodeClient.CoreV1().Pods(podNamespace).Get(podName, metav1.GetOptions{})
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	d.NodeName = pod.Spec.NodeName
-	if d.NodeName == "" {
-		return trace.BadParameter("node name not present in pod spec %v/%v", podNamespace, podName)
-	}
-	return nil
-}
 
-func (d *Controller) getPodCIDR() error {
+
+func (d *controller) getPodCIDR() error {
 	d.Debug("Attempting to retrieve pod CIDR from k8s IPAM.")
-	node, err := d.nodeClient.CoreV1().Nodes().Get(d.NodeName, metav1.GetOptions{})
+	node, err := d.nodeClient.CoreV1().Nodes().Get(d.config.NodeName, metav1.GetOptions{})
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	if node.Spec.PodCIDR == "" {
-		return trace.BadParameter("node/%v node.spec.podCidr is missing", d.NodeName)
+		return trace.BadParameter("node/%v node.spec.podCidr is missing", d.config.NodeName)
 	}
 	d.nodePodCIDR = node.Spec.PodCIDR
 	d.Info("PodCIDR: ", d.nodePodCIDR)
@@ -194,3 +172,4 @@ func getNodeAddr(node *v1.Node) (net.UDPAddr, error) {
 	}
 
 }
+*/

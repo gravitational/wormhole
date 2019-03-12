@@ -18,6 +18,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -29,9 +30,11 @@ import (
 
 var (
 	// buildContainer is a docker container used to build go binaries
-	buildContainer = "golang:1.11.1"
+	buildContainer = "golang:1.12.0"
 
-	golangciVersion = "v1.10.1"
+	// golangciVersion is the version of golangci-lint to use for linting
+	// https://github.com/golangci/golangci-lint/releases
+	golangciVersion = "v1.15.0"
 
 	// cniVersion is the version of cni plugin binaries to ship
 	cniVersion = "v0.7.1"
@@ -199,15 +202,15 @@ func (Test) Lint() error {
 		fmt.Sprintf("--volume=%v:/go/src/github.com/gravitational/wormhole", srcDir()),
 		`--env="GOCACHE=/go/src/github.com/gravitational/wormhole/build/cache/go"`,
 		fmt.Sprint("wormhole-build:", version()),
-		"golangci-lint",
-		"run",
-		"--enable-all",
-		"/go/src/github.com/gravitational/wormhole/...",
+		"bash",
+		"-c",
+		"cd /go/src/github.com/gravitational/wormhole; golangci-lint run --enable-all"+
+			" -D gochecknoglobals -D gochecknoinits",
 	))
 }
 
 func srcDir() string {
-	return os.Getenv("ROOT_DIR")
+	return path.Join(os.Getenv("GOPATH"), "src/github.com/gravitational/wormhole/")
 }
 
 func flags() string {

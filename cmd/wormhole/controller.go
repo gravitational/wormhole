@@ -30,8 +30,9 @@ var controllerCmd = &cobra.Command{
 	Use:   "controller",
 	Short: "Controller for setting up wireguard overlay network between hosts",
 	Long: `
-Controller runs a kubernetes controller, either inside or outside of a pod, that will setup a wireguard based overlay
-network, and synchronize through the kubernetes API.
+Run the main control loop and setup the wireguard overlay network.
+
+The controller can run either on a system when passed kubeconfig settings, or as a pod within the cluster.
 	`,
 	RunE: runController,
 }
@@ -50,7 +51,7 @@ func init() {
 		"kubeconfig-wormhole",
 		"",
 		wormholeKubeconfig,
-		"Path to kubeconfig file for key synchronization and node monitoring",
+		"Path to kubeconfig file with permission to update secrets (namespace: wormhole)",
 	)
 	controllerCmd.Flags().StringVarP(
 		&nodeName,
@@ -64,28 +65,28 @@ func init() {
 		"overlay-cidr",
 		"",
 		overlayCIDR,
-		"The cidr assigned for the overlay network",
+		"The cidr assigned for the overlay network (each pod subnet must exist within the overlay)",
 	)
 	controllerCmd.Flags().IntVarP(
 		&port,
 		"port",
 		"",
 		port,
-		"The external port to use for wireguard connections",
+		"The external port to use for wireguard connections (default 9806)",
 	)
 	controllerCmd.Flags().StringVarP(
 		&wireguardIface,
 		"wireguard-iface",
 		"",
 		wireguardIface,
-		"",
+		"The name of the wireguard interface to create (default wormhole-wg0)",
 	)
 	controllerCmd.Flags().StringVarP(
 		&bridgeIface,
 		"bridge-iface",
 		"",
 		bridgeIface,
-		"",
+		"The name of the internal bridge to create (default wormhole-br0)",
 	)
 }
 

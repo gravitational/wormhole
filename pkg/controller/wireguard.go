@@ -14,25 +14,19 @@ limitations under the License.
 package controller
 
 import (
-	"context"
-	"time"
-
-	"github.com/gravitational/wormhole/pkg/wireguard"
 	"github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/labels"
-
-	"github.com/gravitational/trace"
 )
 
 type wireguardSync struct {
 	logrus.FieldLogger
-	*Controller
+	*controller
 }
 
 func (d *wireguardSync) init() {
-	d.FieldLogger = d.Controller.FieldLogger.WithField("module", "wireguard-sync")
+	d.FieldLogger = d.controller.FieldLogger.WithField("module", "wireguard-sync")
 }
 
+/*
 // wireguard controller, monitors the local wireguard interface, and resyncs with the kubernetes cache
 func (d *wireguardSync) start(ctx context.Context) error {
 	d.init()
@@ -63,23 +57,24 @@ func (d *wireguardSync) run(ctx context.Context) {
 		}
 	}
 }
-
+*/
+/*
 func (d *wireguardSync) syncWireguardWithK8s() error {
 	// get the peers that are locally configured within wireguard
-	peerStatuses, err := wireguard.GetPeerStatus(d.WireguardIface)
+	peerStatuses, err := wireguard.GetPeerStatus(d.config.WireguardIface)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	// get the peers from k8s, and convert to a map indexed by public key
-	nodes, err := d.Controller.nodeList.List(labels.Everything())
+	nodes, err := d.controller.nodeList.List(labels.Everything())
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	desiredPeers := make(map[string]Peer)
 	for _, node := range nodes {
 		// skip ourselves
-		if node.Name == d.NodeName {
+		if node.Name == d.config.NodeName {
 			continue
 		}
 
@@ -119,7 +114,7 @@ func (d *wireguardSync) syncWireguardWithK8s() error {
 		} else {
 			// peer doesn't exist, we should delete it
 			l.Info("Deleting wireguard peer that isn't in desired state")
-			err = wireguard.RemovePeer(d.WireguardIface, peerStatus.PublicKey)
+			err = wireguard.RemovePeer(d.config.WireguardIface, peerStatus.PublicKey)
 			if err != nil {
 				l.WithField("peer", desiredPeer.PublicKey).Info("Error removing peer: ", trace.DebugReport(err))
 			}
@@ -141,3 +136,4 @@ func (d *wireguardSync) syncWireguardWithK8s() error {
 
 	return nil
 }
+*/

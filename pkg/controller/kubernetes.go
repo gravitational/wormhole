@@ -17,9 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/gravitational/trace"
-	"github.com/gravitational/wormhole/pkg/wireguard"
-	"github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,13 +25,106 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+func (c *controller) startNodeWatcher(ctx context.Context) {
+	indexer, controller := cache.NewIndexerInformer(
+		&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				return c.client.CoreV1().Nodes().List(options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				return c.client.CoreV1().Nodes().Watch(options)
+			},
+		}, &v1.Node{},
+		0,
+		cache.ResourceEventHandlerFuncs{
+			AddFunc:    c.handleNodeAdded,
+			UpdateFunc: c.handleNodeUpdated,
+			DeleteFunc: c.handleNodeDeleted,
+		},
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+	)
+
+	c.nodeController = controller
+	c.nodeLister = listers.NewNodeLister(indexer)
+
+	go c.runNodeWatcher(ctx)
+}
+
+func (c *controller) runNodeWatcher(ctx context.Context) {
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+
+	go c.nodeController.Run(stopCh)
+
+	<-ctx.Done()
+}
+
+func (c *controller) handleNodeAdded(obj interface{})                          {}
+func (c *controller) handleNodeDeleted(obj interface{})                        {}
+func (c *controller) handleNodeUpdated(oldObj interface{}, newObj interface{}) {}
+
+func (c *controller) startSecretWatcher(ctx context.Context) {
+	indexer, controller := cache.NewIndexerInformer(
+		&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				return c.client.CoreV1().Secrets(c.config.Namespace).List(options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				return c.client.CoreV1().Secrets(c.config.Namespace).Watch(options)
+			},
+		}, &v1.Node{},
+		60*time.Second,
+		cache.ResourceEventHandlerFuncs{
+			AddFunc:    c.handleSecretAdded,
+			UpdateFunc: c.handleSecretUpdated,
+			DeleteFunc: c.handleSecretDeleted,
+		},
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+	)
+
+	c.secretController = controller
+	c.secretLister = listers.NewSecretLister(indexer)
+
+	go c.runSecretWatcher(ctx)
+}
+
+func (c *controller) runSecretWatcher(ctx context.Context) {
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+
+	go c.secretController.Run(stopCh)
+
+	<-ctx.Done()
+}
+
+func (c *controller) handleSecretAdded(obj interface{})                          {}
+func (c *controller) handleSecretDeleted(obj interface{})                        {}
+func (c *controller) handleSecretUpdated(oldObj interface{}, newObj interface{}) {}
+
+func (c *controller) waitForControllerSync(ctx context.Context) error {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if c.nodeController.HasSynced() && c.secretController.HasSynced() {
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+}
+
+/*
 type kubernetesSync struct {
 	logrus.FieldLogger
-	*Controller
+	controller
 }
 
 func (d *kubernetesSync) init() {
-	d.FieldLogger = d.Controller.FieldLogger.WithField("module", "k8s-sync")
+	d.FieldLogger = d.controller.FieldLogger.WithField("module", "k8s-sync")
 }
 
 func (d *kubernetesSync) start(ctx context.Context) {
@@ -58,8 +148,8 @@ func (d *kubernetesSync) start(ctx context.Context) {
 		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 	)
 
-	d.Controller.nodeController = controller
-	d.Controller.nodeList = listers.NewNodeLister(indexer)
+	d.controller.nodeController = controller
+	d.controller.nodeList = listers.NewNodeLister(indexer)
 
 	go d.run(ctx)
 
@@ -71,7 +161,7 @@ func (d *kubernetesSync) run(ctx context.Context) {
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
-	go d.Controller.nodeController.Run(stopCh)
+	go d.controller.nodeController.Run(stopCh)
 
 	<-ctx.Done()
 }
@@ -84,7 +174,7 @@ func (d *kubernetesSync) handleNodeAdded(obj interface{}) {
 	}
 
 	// ignore our own node
-	if node.Name == d.NodeName {
+	if node.Name == d.config.NodeName {
 		return
 	}
 
@@ -111,7 +201,7 @@ func (d *kubernetesSync) handleNodeUpdated(oldObj interface{}, newObj interface{
 	}
 
 	// ignore our own node
-	if newNode.Name == d.NodeName {
+	if newNode.Name == d.config.NodeName {
 		return
 	}
 
@@ -186,24 +276,9 @@ func (d *kubernetesSync) handleNodeDeleted(obj interface{}) {
 
 	l.Infof("Removing peer %v/%v", node.Name, publicKey)
 
-	err := wireguard.RemovePeer(d.WireguardIface, publicKey)
+	err := wireguard.RemovePeer(d.config.WireguardIface, publicKey)
 	if err != nil {
 		l.Warn("Error removing peer: ", trace.DebugReport(err))
 	}
 }
-
-func (d *kubernetesSync) waitForNodeControllerSync(ctx context.Context) error {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			if d.Controller.nodeController.HasSynced() {
-				return nil
-			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-}
+*/

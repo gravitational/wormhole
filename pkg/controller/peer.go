@@ -13,19 +13,7 @@ limitations under the License.
 
 package controller
 
-import (
-	"fmt"
-	"net"
-	"strings"
-
-	"github.com/gravitational/wormhole/pkg/wireguard"
-	"github.com/sirupsen/logrus"
-
-	"github.com/google/go-cmp/cmp"
-	"github.com/gravitational/trace"
-	"k8s.io/api/core/v1"
-)
-
+/*
 type Peer struct {
 	PublicKey   string
 	Address     net.UDPAddr
@@ -57,44 +45,19 @@ func NodeToPeer(node *v1.Node) (*Peer, error) {
 	}, nil
 }
 
-func PeerStatusToPeer(peerStatus wireguard.PeerStatus) (*Peer, error) {
-	addr, err := net.ResolveUDPAddr("udp", peerStatus.Endpoint)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	var allowedCIDR []net.IPNet
-	if peerStatus.AllowedIP != "" {
-		split := strings.Split(peerStatus.AllowedIP, ",")
-		for _, cidr := range split {
-			_, network, err := net.ParseCIDR(cidr)
-			if err != nil {
-				return nil, trace.WrapWithMessage(err, "failed parsing network: %v", network)
-			}
-			allowedCIDR = append(allowedCIDR, *network)
-		}
-	}
-
-	return &Peer{
-		PublicKey:   peerStatus.PublicKey,
-		Address:     *addr,
-		AllowedCIDR: allowedCIDR,
-	}, nil
-}
-
 // Equals compares two nodes for equality
 func (n Peer) Equals(other Peer) bool {
 	return cmp.Equal(n, other)
 }
 
-func (d *Controller) RemovePeer(peer Peer) error {
-	return trace.Wrap(wireguard.RemovePeer(d.WireguardIface, peer.PublicKey))
+func (d *controller) RemovePeer(peer Peer) error {
+	return trace.Wrap(wireguard.RemovePeer(d.config.WireguardIface, peer.PublicKey))
 }
 
-func (d *Controller) AddPeer(peer Peer) error {
+func (d *controller) AddPeer(peer Peer) error {
 
 	return trace.Wrap(wireguard.AddPeer(
-		d.WireguardIface, peer.PublicKey, d.sharedKey, peer.AllowedCIDRString(), peer.Address.String()))
+		d.config.WireguardIface, peer.PublicKey, d.sharedKey, peer.AllowedCIDRString(), peer.Address.String()))
 }
 
 func (n Peer) AllowedCIDRString() string {
@@ -112,3 +75,4 @@ func (n Peer) Fields(prefix string) logrus.Fields {
 		fmt.Sprint(prefix, "allowed_ips"): n.AllowedCIDRString(),
 	}
 }
+*/
