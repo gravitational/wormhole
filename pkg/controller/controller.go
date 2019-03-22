@@ -18,6 +18,9 @@ import (
 	"net"
 	"time"
 
+	wormholeclientset "github.com/gravitational/wormhole/pkg/client/clientset/versioned"
+	wormholelister "github.com/gravitational/wormhole/pkg/client/listers/wormhole.gravitational.io/v1beta1"
+	"github.com/gravitational/wormhole/pkg/iptables"
 	"github.com/gravitational/wormhole/pkg/wireguard"
 
 	"github.com/gravitational/trace"
@@ -26,6 +29,7 @@ import (
 	listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 type Config struct {
@@ -55,6 +59,9 @@ type Config struct {
 
 	// ResyncPeriod is how frequently to re-sync state between each component
 	ResyncPeriod time.Duration
+
+	// Endpoint is the networking address that is available for routing between all wireguard nodes
+	Endpoint string
 }
 
 type Controller interface {
@@ -67,7 +74,8 @@ type controller struct {
 	config Config
 
 	// client is a kubernetes client for accessing wormhole data
-	client kubernetes.Interface
+	client    kubernetes.Interface
+	crdClient wormholeclientset.Interface
 
 	// ipamInfo is IPAM info about the node
 	ipamInfo *ipamInfo
@@ -76,7 +84,7 @@ type controller struct {
 	wireguardInterface wireguard.Interface
 
 	nodeController cache.Controller
-	nodeLister     listers.NodeLister
+	nodeLister     wormholelister.NodeLister
 
 	secretController cache.Controller
 	secretLister     listers.SecretLister
@@ -94,20 +102,27 @@ func (d *controller) init() error {
 	d.Info("Initializing Wormhole...")
 
 	var err error
+	var config *rest.Config
 	if d.config.KubeconfigPath != "" {
-		d.client, err = getClientsetFromKubeconfig(d.config.KubeconfigPath)
+		config, err = clientcmd.BuildConfigFromFlags("", d.config.KubeconfigPath)
 		if err != nil {
 			return trace.Wrap(err)
 		}
 	} else {
-		clusterConfig, err := rest.InClusterConfig()
+		config, err = rest.InClusterConfig()
 		if err != nil {
 			return trace.Wrap(err)
 		}
-		d.client, err = kubernetes.NewForConfig(clusterConfig)
-		if err != nil {
-			return trace.Wrap(err)
-		}
+	}
+
+	d.client, err = kubernetes.NewForConfig(config)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	d.crdClient, err = wormholeclientset.NewForConfig(config)
+	if err != nil {
+		return trace.Wrap(err)
 	}
 
 	if d.config.NodeName == "" {
@@ -183,91 +198,44 @@ func (d *controller) Run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
+	err = d.publishNodeInfo()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	// initialize the kubernetes secret object
 	err = d.initKubeObjects()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	return nil
-}
+	d.startNodeWatcher(ctx)
+	d.startSecretWatcher(ctx)
 
-/*
-func (d *controller) startup(ctx context.Context) error {
-	d.Info("Starting Wormhole...")
-	var err error
-
-
-	psk, err := d.getOrSetPSK()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	d.sharedKey = psk
-	d.Info("PSK: <redacted>")
-
-	pubKey, privKey, err := d.generateKeypair()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	d.publicKey = pubKey
-	d.Info("PubKey: ", pubKey)
-	d.Info("PrivKey: <redacted>")
-
-	// send our new public key to the cluster
-	err = d.publishPublicKey()
+	err = d.waitForControllerSync(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	// configure wireguard
-	// TODO(knisbet) right now, I'm just ignoring errors in the setup
-	// but this needs to eventually be handled properly
-	_ = wireguard.CreateInterface(d.config.WireguardIface)
-	_ = wireguard.SetIP(d.config.WireguardIface, d.wormholeGateway)
-	_ = wireguard.SetPrivateKey(d.config.WireguardIface, privKey)
-	_ = wireguard.SetListenPort(d.config.WireguardIface, d.config.Port)
-	_ = wireguard.SetUp(d.config.WireguardIface)
-	_ = wireguard.SetRoute(d.config.WireguardIface, d.config.OverlayCIDR)
-
-	// configure CNI on the host
-	err = d.configureCNI()
+	err = d.updatePeerSecrets()
 	if err != nil {
 		return trace.Wrap(err)
 	}
-
-	kubernetesSync := kubernetesSync{
-		Controller: d,
-	}
-	kubernetesSync.start(ctx)
-
-	wireguardSync := wireguardSync{
-		Controller: d,
-	}
-	err = wireguardSync.start(ctx)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	return nil
-}
-*/
-
-/*
-func (d *controller) Run(ctx context.Context) error {
-	d.Info("Starting wormhole Controller with config: ", spew.Sdump(d))
 
 	iptablesSync := iptables.Config{
 		FieldLogger:    d.FieldLogger.WithField("module", "iptables"),
 		OverlayCIDR:    d.config.OverlayCIDR,
-		PodCIDR:        d.nodePodCIDR,
+		PodCIDR:        d.config.NodeCIDR,
 		WireguardIface: d.config.WireguardIface,
 		BridgeIface:    d.config.BridgeIface,
 	}
-	err := iptablesSync.Run(ctx)
+	err = iptablesSync.Run(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	return nil
+	d.Info("Wormhole is running")
+
+	<-ctx.Done()
+	return trace.Wrap(ctx.Err())
 }
-*/

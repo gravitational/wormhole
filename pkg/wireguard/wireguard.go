@@ -44,6 +44,7 @@ type Peer struct {
 
 type PeerStatus struct {
 	PublicKey     string
+	SharedKey     string
 	Endpoint      string
 	AllowedIP     string
 	LastHandshake time.Time
@@ -227,6 +228,10 @@ func (i iface) SyncPeers(peers map[string]Peer) {
 	}
 
 	i.Debug("Syncing peers to wireguard complete.")
+}
+
+func (i iface) GenerateSharedKey() (string, error) {
+	return i.wg.genPSK()
 }
 
 func (i iface) AddPeer(peer Peer) error {

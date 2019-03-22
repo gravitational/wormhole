@@ -13,3 +13,5 @@ RUN echo "deb http://deb.debian.org/debian/ unstable main" > /etc/apt/sources.li
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
     wireguard
+
+WORKDIR "/go/src/github.com/gravitational/wormhole/"

@@ -40,7 +40,7 @@ var (
 	cniVersion = "v0.7.1"
 
 	// registryImage is the docker tag to use to push the container to the requested registry
-	registryImage = env("WORM_REGISTRY_IMAGE", "quay.io/gravitational/wormhole")
+	registryImage = env("WORM_REGISTRY_IMAGE", "quay.io/gravitational/wormhole-dev")
 )
 
 // env, loads a variable from the environment, or uses the provided default
@@ -204,7 +204,7 @@ func (Test) Lint() error {
 		fmt.Sprint("wormhole-build:", version()),
 		"bash",
 		"-c",
-		"cd /go/src/github.com/gravitational/wormhole; golangci-lint run --enable-all"+
+		"cd /go/src/github.com/gravitational/wormhole; golangci-lint run --deadline=30m --enable-all"+
 			" -D gochecknoglobals -D gochecknoinits",
 	))
 }

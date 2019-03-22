@@ -41,6 +41,14 @@ func TestDetectIPAM(t *testing.T) {
 				Spec: v1.NodeSpec{
 					PodCIDR: "10.20.1.0/24",
 				},
+				Status: v1.NodeStatus{
+					Addresses: []v1.NodeAddress{
+						{
+							Type:    "InternalIP",
+							Address: "10.0.0.1",
+						},
+					},
+				},
 			},
 			expected: "10.20.1.0/24",
 		},
@@ -82,6 +90,135 @@ func TestDetectIPAM(t *testing.T) {
 			assert.NoError(t, err, c.description)
 			assert.Equal(t, c.expected, cont.config.NodeCIDR, c.description)
 		}
+	}
+}
+
+func TestDetectIPAMNodeAddress(t *testing.T) {
+	cases := []struct {
+		node     *v1.Node
+		expected string
+	}{
+		{
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-node",
+				},
+				Spec: v1.NodeSpec{
+					PodCIDR: "10.20.1.0/24",
+				},
+				Status: v1.NodeStatus{
+					Addresses: []v1.NodeAddress{
+						{
+							Type:    "InternalIP",
+							Address: "10.0.0.1",
+						},
+					},
+				},
+			},
+			expected: "10.0.0.1",
+		},
+		{
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-node",
+				},
+				Spec: v1.NodeSpec{
+					PodCIDR: "10.20.1.0/24",
+				},
+				Status: v1.NodeStatus{
+					Addresses: []v1.NodeAddress{
+						{
+							Type:    "ExternalIP",
+							Address: "10.0.0.2",
+						},
+					},
+				},
+			},
+			expected: "10.0.0.2",
+		},
+		{
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-node",
+				},
+				Spec: v1.NodeSpec{
+					PodCIDR: "10.20.1.0/24",
+				},
+				Status: v1.NodeStatus{
+					Addresses: []v1.NodeAddress{
+						{
+							Type:    "InternalIP",
+							Address: "10.0.0.3",
+						},
+						{
+							Type:    "ExternalIP",
+							Address: "10.0.0.4",
+						},
+					},
+				},
+			},
+			expected: "10.0.0.3",
+		},
+		{
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-node",
+				},
+				Spec: v1.NodeSpec{
+					PodCIDR: "10.20.1.0/24",
+				},
+				Status: v1.NodeStatus{
+					Addresses: []v1.NodeAddress{
+						{
+							Type:    "InternalIP",
+							Address: "::1",
+						},
+						{
+							Type:    "ExternalIP",
+							Address: "::2",
+						},
+						{
+							Type:    "InternalIP",
+							Address: "10.0.0.5",
+						},
+						{
+							Type:    "ExternalIP",
+							Address: "10.0.0.6",
+						},
+					},
+				},
+			},
+			expected: "10.0.0.5",
+		},
+		{
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-node",
+				},
+				Spec: v1.NodeSpec{
+					PodCIDR: "10.20.1.0/24",
+				},
+				Status: v1.NodeStatus{
+					Addresses: []v1.NodeAddress{},
+				},
+			},
+			expected: "",
+		},
+	}
+
+	for _, c := range cases {
+		cont := &controller{
+			FieldLogger: logrus.WithField("logger", "test"),
+			client:      testclient.NewSimpleClientset(c.node),
+			config: Config{
+				NodeName: c.node.Name,
+			},
+		}
+		err := cont.detectIPAM()
+
+		assert.NoError(t, err, c.expected)
+		assert.Equal(t, c.expected, cont.config.Endpoint, c.expected)
+
 	}
 }
 

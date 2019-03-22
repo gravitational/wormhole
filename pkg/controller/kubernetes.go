@@ -15,27 +15,85 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff"
+
+	"github.com/gravitational/wormhole/pkg/wireguard"
+
+	"github.com/gravitational/trace"
+	"github.com/gravitational/wormhole/pkg/apis/wormhole.gravitational.io/v1beta1"
+	wormholelister "github.com/gravitational/wormhole/pkg/client/listers/wormhole.gravitational.io/v1beta1"
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
+const (
+	secretObjectName = "wireguard-shared-secrets"
+)
+
+// initKubeObjects runs during startup and is meant to try and create empty kubernetes objects that wormhole uses to
+// exchange state via the kubernetes API.
+// This just tries to create the object, and ignores already exists errors.
+func (c *controller) initKubeObjects() error {
+	c.Debugf("Initializing secret %v/%v", c.config.Namespace, secretObjectName)
+
+	_, err := c.client.CoreV1().Secrets(c.config.Namespace).Create(&v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: secretObjectName,
+		},
+	})
+
+	if errors.IsAlreadyExists(err) {
+		return nil
+	}
+
+	return trace.Wrap(err)
+
+}
+
+// publishNodeInfo publishes the node configuration to the kubernetes API for the rest of the cluster to pick up
+func (c *controller) publishNodeInfo() error {
+	node := &v1beta1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: c.config.NodeName,
+		},
+		Status: v1beta1.NodeStatus{
+			Port:      c.config.Port,
+			PublicKey: c.wireguardInterface.PublicKey(),
+			NodeCIDR:  c.config.NodeCIDR,
+			Endpoint:  c.config.Endpoint,
+		},
+	}
+
+	c.Debug("Attempting to publish node information object to kubernetes cluster (update)")
+	_, err := c.crdClient.WormholeV1beta1().Nodes().UpdateStatus(node)
+	if errors.IsNotFound(err) {
+		c.Debug("Attempting to publish node information object to kubernetes cluster (create)")
+		_, err = c.crdClient.WormholeV1beta1().Nodes().Create(node)
+	}
+	return trace.Wrap(err)
+}
+
 func (c *controller) startNodeWatcher(ctx context.Context) {
 	indexer, controller := cache.NewIndexerInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return c.client.CoreV1().Nodes().List(options)
+				return c.crdClient.WormholeV1beta1().Nodes().List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return c.client.CoreV1().Nodes().Watch(options)
+				return c.crdClient.WormholeV1beta1().Nodes().Watch(options)
 			},
-		}, &v1.Node{},
-		0,
+		}, &v1beta1.Node{},
+		60*time.Second,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    c.handleNodeAdded,
 			UpdateFunc: c.handleNodeUpdated,
@@ -45,7 +103,7 @@ func (c *controller) startNodeWatcher(ctx context.Context) {
 	)
 
 	c.nodeController = controller
-	c.nodeLister = listers.NewNodeLister(indexer)
+	c.nodeLister = wormholelister.NewNodeLister(indexer)
 
 	go c.runNodeWatcher(ctx)
 }
@@ -59,9 +117,21 @@ func (c *controller) runNodeWatcher(ctx context.Context) {
 	<-ctx.Done()
 }
 
-func (c *controller) handleNodeAdded(obj interface{})                          {}
-func (c *controller) handleNodeDeleted(obj interface{})                        {}
-func (c *controller) handleNodeUpdated(oldObj interface{}, newObj interface{}) {}
+// handleNodeAdded
+// Note: doesn't need to do anything, since adding a node also requires updating secrets
+func (c *controller) handleNodeAdded(obj interface{}) {}
+func (c *controller) handleNodeDeleted(obj interface{}) {
+	err := c.syncWithWireguard()
+	if err != nil {
+		c.Warn("Erroring syncing with wireguard: ", trace.DebugReport(err))
+	}
+}
+func (c *controller) handleNodeUpdated(oldObj interface{}, newObj interface{}) {
+	err := c.syncWithWireguard()
+	if err != nil {
+		c.Warn("Erroring syncing with wireguard: ", trace.DebugReport(err))
+	}
+}
 
 func (c *controller) startSecretWatcher(ctx context.Context) {
 	indexer, controller := cache.NewIndexerInformer(
@@ -72,7 +142,7 @@ func (c *controller) startSecretWatcher(ctx context.Context) {
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				return c.client.CoreV1().Secrets(c.config.Namespace).Watch(options)
 			},
-		}, &v1.Node{},
+		}, &v1.Secret{},
 		60*time.Second,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    c.handleSecretAdded,
@@ -97,12 +167,22 @@ func (c *controller) runSecretWatcher(ctx context.Context) {
 	<-ctx.Done()
 }
 
-func (c *controller) handleSecretAdded(obj interface{})                          {}
-func (c *controller) handleSecretDeleted(obj interface{})                        {}
-func (c *controller) handleSecretUpdated(oldObj interface{}, newObj interface{}) {}
+func (c *controller) handleSecretAdded(obj interface{}) {}
+func (c *controller) handleSecretDeleted(obj interface{}) {
+	err := c.syncWithWireguard()
+	if err != nil {
+		c.Warn("Erroring syncing with wireguard: ", trace.DebugReport(err))
+	}
+}
+func (c *controller) handleSecretUpdated(oldObj interface{}, newObj interface{}) {
+	err := c.syncWithWireguard()
+	if err != nil {
+		c.Warn("Erroring syncing with wireguard: ", trace.DebugReport(err))
+	}
+}
 
 func (c *controller) waitForControllerSync(ctx context.Context) error {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
@@ -117,168 +197,125 @@ func (c *controller) waitForControllerSync(ctx context.Context) error {
 
 }
 
-/*
-type kubernetesSync struct {
-	logrus.FieldLogger
-	controller
-}
-
-func (d *kubernetesSync) init() {
-	d.FieldLogger = d.controller.FieldLogger.WithField("module", "k8s-sync")
-}
-
-func (d *kubernetesSync) start(ctx context.Context) {
-	d.init()
-
-	indexer, controller := cache.NewIndexerInformer(
-		&cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return d.wormholeClient.CoreV1().Nodes().List(options)
-			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return d.wormholeClient.CoreV1().Nodes().Watch(options)
-			},
-		}, &v1.Node{},
-		120*time.Second,
-		cache.ResourceEventHandlerFuncs{
-			AddFunc:    d.handleNodeAdded,
-			UpdateFunc: d.handleNodeUpdated,
-			DeleteFunc: d.handleNodeDeleted,
-		},
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-	)
-
-	d.controller.nodeController = controller
-	d.controller.nodeList = listers.NewNodeLister(indexer)
-
-	go d.run(ctx)
-
-	// block startup until the controller has synced or the ctx has been cancelled
-	_ = d.waitForNodeControllerSync(ctx)
-}
-
-func (d *kubernetesSync) run(ctx context.Context) {
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-
-	go d.controller.nodeController.Run(stopCh)
-
-	<-ctx.Done()
-}
-
-func (d *kubernetesSync) handleNodeAdded(obj interface{}) {
-	node, ok := obj.(*v1.Node)
-	if !ok {
-		d.Warnf("handleNodeAdded received unexpected object: %T", obj)
-		return
-	}
-
-	// ignore our own node
-	if node.Name == d.config.NodeName {
-		return
-	}
-
-	peer, err := NodeToPeer(node)
+func (c *controller) syncWithWireguard() error {
+	nodes, err := c.nodeLister.List(labels.NewSelector())
 	if err != nil {
-		d.WithField("node", node.Name).Info("Error converting new node to peer: ", err)
-		return
+		return trace.Wrap(err)
 	}
 
-	d.WithFields(peer.Fields("")).WithField("node", node.Name).Info("Received new node from kubernetes.")
-
-	err = d.AddPeer(*peer)
+	sharedSecrets, err := c.secretLister.Secrets(c.config.Namespace).Get(secretObjectName)
 	if err != nil {
-		d.WithFields(peer.Fields("")).WithField("node", node.Name).Error("Error adding peer: ", trace.DebugReport(err))
-	}
-}
-
-func (d *kubernetesSync) handleNodeUpdated(oldObj interface{}, newObj interface{}) {
-	oldNode, oOk := oldObj.(*v1.Node)
-	newNode, nOk := newObj.(*v1.Node)
-	if !oOk || !nOk {
-		d.Warnf("handleNodeUpdated received unexpected object old: %T new: %T", oldObj, newObj)
-		return
+		return trace.Wrap(err)
 	}
 
-	// ignore our own node
-	if newNode.Name == d.config.NodeName {
-		return
-	}
+	peers := make(map[string]wireguard.Peer, len(nodes))
 
-	// ignore errors on converting the nodes
-	oldPeer, _ := NodeToPeer(oldNode)
-	newPeer, err := NodeToPeer(newNode)
-	// Handle the new node being invalid
-	if err != nil {
-		d.WithField("node", newNode.Name).Info("Node updated with invalid configuration: ", err)
-
-		// if the previous configuration was valid, delete the peer from wireguard
-		if oldPeer != nil {
-			d.WithFields(oldPeer.Fields("")).WithField("node", oldNode.Name).Info("Removing peer")
-			err = d.RemovePeer(*oldPeer)
-			if err != nil {
-				d.WithFields(oldPeer.Fields("")).WithField("node", oldNode.Name).Warn("Error removing peer: ",
-					trace.DebugReport(err))
-			}
+	for _, node := range nodes {
+		// we don't connect to ourselves
+		if node.Name == c.config.NodeName {
+			continue
 		}
-		return
+
+		ss, ok := sharedSecrets.Data[nodePairKey(c.config.NodeName, node.Name)]
+		if !ok {
+			// A shared secret doesn't exist between us and the peer node
+			// This should be relatively rare, so trigger the handling of this in a separate routine
+			go c.handleMissingPeerSharedSecret(node.Name)
+			continue
+		}
+
+		peers[node.Status.PublicKey] = wireguard.Peer{
+			PublicKey: node.Status.PublicKey,
+			SharedKey: string(ss),
+			AllowedIP: []string{node.Status.NodeCIDR},
+			Endpoint:  node.Status.Endpoint,
+		}
+	}
+	c.wireguardInterface.SyncPeers(peers)
+
+	return nil
+}
+
+func nodePairKey(node1, node2 string) string {
+	if strings.Compare(node1, node2) < 0 {
+		return fmt.Sprintf("shared-secret-%v-%v", node1, node2)
+	}
+	return fmt.Sprintf("shared-secret-%v-%v", node2, node1)
+}
+
+// updatePeerSecrets goes through each known peer, and refreshes the shared secret used between the peers
+// this ensures that all secrets are refreshed/rotated when processes are restarted.
+func (c *controller) updatePeerSecrets() error {
+	nodes, err := c.nodeLister.List(labels.NewSelector())
+	if err != nil {
+		return trace.Wrap(err)
 	}
 
-	// if the previous configuration was invalid, but the new configuration is valid, add the peer
-	if oldPeer == nil && newPeer != nil {
-		d.WithFields(newPeer.Fields("")).WithField("node", newNode.Name).Info("Adding peer")
-		err = d.AddPeer(*newPeer)
+	secretObject, err := c.secretLister.Secrets(c.config.Namespace).Get(secretObjectName)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	for _, node := range nodes {
+		psk, err := c.wireguardInterface.GenerateSharedKey()
 		if err != nil {
-			d.WithFields(newPeer.Fields("")).WithField("node", newNode.Name).Warn("Error removing peer: ",
-				trace.DebugReport(err))
-
+			return trace.Wrap(err)
 		}
-		return
+
+		if secretObject.Data == nil {
+			secretObject.Data = make(map[string][]byte)
+		}
+		secretObject.Data[nodePairKey(c.config.NodeName, node.Name)] = []byte(psk)
 	}
 
-	// if we had a previously valid peer, and it's not equal to the new peer
-	// we should update the peer
-	if oldPeer != nil && !oldPeer.Equals(*newPeer) {
-		d.WithFields(oldPeer.Fields("old_")).WithFields(newPeer.Fields("new_")).WithField("node", newNode.Name).
-			Info("Replacing peer")
-
-		err = d.RemovePeer(*oldPeer)
-		if err != nil {
-			d.WithFields(oldPeer.Fields("")).WithField("node", newNode.Name).Warn("Error removing peer: ",
-				trace.DebugReport(err))
-		}
-
-		err = d.AddPeer(*newPeer)
-		if err != nil {
-			d.WithFields(newPeer.Fields("")).WithField("node", newNode.Name).Error("Error adding peer: ",
-				trace.DebugReport(err))
-		}
-
-	}
-
+	// the peer secrets are based on last writer wins, so we ignore the object here
+	// and it will be processed when our watchers get the updated object
+	_, err = c.client.CoreV1().Secrets(c.config.Namespace).Update(secretObject)
+	return trace.Wrap(err)
 }
 
-func (d *kubernetesSync) handleNodeDeleted(obj interface{}) {
-	node, ok := obj.(*v1.Node)
-	if !ok {
-		d.Warnf("handleNodeDeleted received unexpected object: %T", obj)
-		return
-	}
+func (c *controller) retryGeneratePeerSharedSecret(peer string) error {
+	err := backoff.Retry(func() error {
+		_, err := c.generatePeerSharedSecret(peer)
+		return trace.Wrap(err)
+	}, &backoff.ExponentialBackOff{
+		InitialInterval:     1 * time.Second,
+		RandomizationFactor: 0.2,
+		Multiplier:          2,
+		MaxElapsedTime:      30 * time.Second,
+		Clock:               backoff.SystemClock,
+	})
+	return trace.Wrap(err)
+}
 
-	l := d.WithField("node", node.Name)
-
-	// ignore ok, just use "" as key if the annotation is missing
-	publicKey := node.Annotations[annotationWireguardPublicKey]
-	if publicKey == "" {
-		l.Infof("Unknown peer %v/%v", node.Name, publicKey)
-		return
-	}
-
-	l.Infof("Removing peer %v/%v", node.Name, publicKey)
-
-	err := wireguard.RemovePeer(d.config.WireguardIface, publicKey)
+func (c *controller) handleMissingPeerSharedSecret(peer string) {
+	_, err := c.generatePeerSharedSecret(peer)
 	if err != nil {
-		l.Warn("Error removing peer: ", trace.DebugReport(err))
+		c.Warn("failed to create shared secret for missing peer")
 	}
 }
-*/
+
+// generatePeerSharedSecret generates a new wireguard pre-shared key, and write it to the kubernetes secret object
+// and the secret is returned to the caller
+func (c *controller) generatePeerSharedSecret(peer string) (string, error) {
+
+	//secretObject, err := c.secretLister.Secrets(c.config.Namespace).Get(secretObjectName)
+	secretObject, err := c.client.CoreV1().Secrets(c.config.Namespace).Get(secretObjectName, metav1.GetOptions{})
+	if err != nil {
+		return "", trace.Wrap(err)
+	}
+
+	psk, err := c.wireguardInterface.GenerateSharedKey()
+	if err != nil {
+		return "", trace.Wrap(err)
+	}
+
+	if secretObject.Data == nil {
+		secretObject.Data = make(map[string][]byte)
+	}
+	secretObject.Data[nodePairKey(c.config.NodeName, peer)] = []byte(psk)
+
+	_, err = c.client.CoreV1().Secrets(c.config.Namespace).Update(secretObject)
+	return psk, trace.Wrap(err)
+
+}

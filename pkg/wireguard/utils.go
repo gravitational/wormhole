@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -49,10 +50,16 @@ type Wg interface {
 }
 
 type wg struct {
+	sync.Mutex
 	iface string
+
+	// sharedSecrets is the map of public-key to shared secrets written to wireguard
+	// We currently need to cache this, as the shared secret can't be read back from wireguard
+	// and as such it gets missed in our control loop for detecting differences in configuration.
+	sharedSecrets map[string]string
 }
 
-func (wg) genKey() (string, error) {
+func (w *wg) genKey() (string, error) {
 	key, err := sh.Output("wg", "genkey")
 	if err != nil {
 		return "", trace.Wrap(err)
@@ -60,7 +67,7 @@ func (wg) genKey() (string, error) {
 	return key, nil
 }
 
-func (wg) genPSK() (string, error) {
+func (w *wg) genPSK() (string, error) {
 	key, err := sh.Output("wg", "genpsk")
 	if err != nil {
 		return "", trace.Wrap(err)
@@ -68,7 +75,7 @@ func (wg) genPSK() (string, error) {
 	return key, nil
 }
 
-func (wg) pubKey(key string) (string, error) {
+func (w *wg) pubKey(key string) (string, error) {
 	c := exec.Command("wg", "pubkey")
 	c.Env = os.Environ()
 	c.Stderr = os.Stderr
@@ -100,7 +107,7 @@ func (wg) pubKey(key string) (string, error) {
 	return strings.TrimSuffix(stdout.String(), "\n"), nil
 }
 
-func (w wg) setPrivateKey(key string) error {
+func (w *wg) setPrivateKey(key string) error {
 	// it looks like wireguard only accepts key's by file
 	// so we'll need to write the key to a file, load into wireguard
 	// then delete it
@@ -124,7 +131,7 @@ func (w wg) setPrivateKey(key string) error {
 	))
 }
 
-func (w wg) createInterface() error {
+func (w *wg) createInterface() error {
 	return trace.ConvertSystemError(sh.Run(
 		"ip",
 		"link",
@@ -136,7 +143,7 @@ func (w wg) createInterface() error {
 	))
 }
 
-func (w wg) setIP(ip string) error {
+func (w *wg) setIP(ip string) error {
 	return trace.ConvertSystemError(sh.Run(
 		"ip",
 		"address",
@@ -147,7 +154,7 @@ func (w wg) setIP(ip string) error {
 	))
 }
 
-func (w wg) setListenPort(port int) error {
+func (w *wg) setListenPort(port int) error {
 	return trace.ConvertSystemError(sh.Run(
 		"wg",
 		"set",
@@ -157,7 +164,7 @@ func (w wg) setListenPort(port int) error {
 	))
 }
 
-func (w wg) setUp() error {
+func (w *wg) setUp() error {
 	return trace.ConvertSystemError(sh.Run(
 		"ip",
 		"link",
@@ -167,7 +174,7 @@ func (w wg) setUp() error {
 	))
 }
 
-func (w wg) setDown() error {
+func (w *wg) setDown() error {
 	return trace.ConvertSystemError(sh.Run(
 		"ip",
 		"link",
@@ -177,7 +184,7 @@ func (w wg) setDown() error {
 	))
 }
 
-func (w wg) setRoute(route string) error {
+func (w *wg) setRoute(route string) error {
 	return trace.ConvertSystemError(sh.Run(
 		"ip",
 		"route",
@@ -188,7 +195,7 @@ func (w wg) setRoute(route string) error {
 	))
 }
 
-func (w wg) removePeer(peerPublicKey string) error {
+func (w *wg) removePeer(peerPublicKey string) error {
 	return trace.ConvertSystemError(sh.Run(
 		"wg",
 		"set",
@@ -199,7 +206,11 @@ func (w wg) removePeer(peerPublicKey string) error {
 	))
 }
 
-func (w wg) addPeer(peer Peer) error {
+func (w *wg) addPeer(peer Peer) error {
+	w.Lock()
+	defer w.Unlock()
+	w.sharedSecrets[peer.PublicKey] = peer.SharedKey
+
 	// it looks like wireguard only accepts key's by file
 	// so we'll need to write the key to a file, load into wireguard
 	// then delete it
@@ -226,7 +237,7 @@ func (w wg) addPeer(peer Peer) error {
 	))
 }
 
-func (w wg) getPeers() (map[string]PeerStatus, error) {
+func (w *wg) getPeers() (map[string]PeerStatus, error) {
 	o, err := sh.Output(
 		"wg",
 		"show",
@@ -271,6 +282,9 @@ func (w wg) getPeers() (map[string]PeerStatus, error) {
 			}
 		}
 
+		w.Lock()
+		defer w.Unlock()
+
 		results[c[0]] = PeerStatus{
 			PublicKey:     c[0],
 			Endpoint:      replaceNone(c[2]),
@@ -279,6 +293,7 @@ func (w wg) getPeers() (map[string]PeerStatus, error) {
 			BytesTX:       bytesTX,
 			BytesRX:       bytesRX,
 			Keepalive:     keepAlive,
+			SharedKey:     w.sharedSecrets[c[0]],
 		}
 
 	}
@@ -296,6 +311,7 @@ func replaceNone(s string) string {
 func (p PeerStatus) ToPeer() Peer {
 	return Peer{
 		PublicKey: p.PublicKey,
+		SharedKey: p.SharedKey,
 		Endpoint:  p.Endpoint,
 		AllowedIP: strings.Split(p.AllowedIP, ","),
 	}
@@ -305,11 +321,10 @@ func (p Peer) Equals(r Peer) bool {
 	if p.PublicKey != r.PublicKey {
 		return false
 	}
-	// don't compare shared key for now, wireguard doesn't seem to have a way to read the shared key in use
-	// TODO(knisbet)
-	/*if p.SharedKey != r.SharedKey {
+
+	if p.SharedKey != r.SharedKey {
 		return false
-	}*/
+	}
 
 	if len(p.AllowedIP) != len(r.AllowedIP) {
 		return false

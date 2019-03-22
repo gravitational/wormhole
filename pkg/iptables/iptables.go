@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudflare/cfssl/log"
 	"github.com/sirupsen/logrus"
 
 	"github.com/coreos/go-iptables/iptables"
@@ -86,7 +85,7 @@ func (c *Config) sync(ctx context.Context) {
 					c.Warn("Error creating iptables rules: ", trace.DebugReport(err))
 				}
 			}
-			c.Info("Iptables re-sync complete.")
+			c.Debug("Iptables re-sync complete.")
 		case <-ctx.Done():
 			return
 		}
@@ -99,7 +98,7 @@ func (c *Config) generateRules() []rule {
 	// Don't nat any traffic with source and destination within the overlay network
 	rules = append(rules,
 		rule{"nat", "POSTROUTING", []string{"-s", c.OverlayCIDR, "-d", c.OverlayCIDR, "-j", "RETURN"},
-			"wormhole: accept overlay->overlay"},
+			"wormhole: overlay->overlay"},
 	)
 
 	// Nat all other traffic
@@ -155,7 +154,7 @@ func (c *Config) generateRules() []rule {
 			"wormhole: drop spoofed traffic"},
 	)
 
-	// Join the Forward / Input chains
+	// Apply anti-spoofing to the Forward / Input chains
 	rules = append(rules,
 		rule{"filter", "FORWARD", []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain},
 			"wormhole: check antispoofing"},
@@ -181,7 +180,7 @@ func (c *Config) rulesOk() (bool, error) {
 
 func (c *Config) cleanupRules() {
 	for _, rule := range c.generateRules() {
-		log.Info("Deleting iptables rule: table: ", rule.table, " chain: ", rule.chain, " spec: ",
+		c.Info("Deleting iptables rule: table: ", rule.table, " chain: ", rule.chain, " spec: ",
 			strings.Join(rule.getRule(), " "))
 
 		// ignore and log errors in delete, which are likely caused by the rule not existing
@@ -204,7 +203,7 @@ func (c *Config) createRules() error {
 	}
 
 	for _, rule := range c.generateRules() {
-		log.Info("Adding iptables rule: table: ", rule.table, " chain: ", rule.chain, " spec: ",
+		c.Info("Adding iptables rule: table: ", rule.table, " chain: ", rule.chain, " spec: ",
 			strings.Join(rule.getRule(), " "))
 
 		// ignore and log errors in delete, which are likely caused by the rule not existing

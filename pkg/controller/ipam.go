@@ -46,6 +46,34 @@ func (d *controller) detectIPAM() error {
 
 	d.config.NodeCIDR = node.Spec.PodCIDR
 
+	if d.config.Endpoint == "" {
+		var (
+			internalIP net.IP
+			externalIP net.IP
+		)
+		for _, addr := range node.Status.Addresses {
+			// try and parse addr as an IPv4 address
+			ip := net.ParseIP(addr.Address)
+			if ip == nil || ip.To4() == nil {
+				continue
+			}
+
+			switch addr.Type {
+			case "InternalIP":
+				internalIP = ip
+			case "ExternalIP":
+				externalIP = ip
+			}
+		}
+
+		switch {
+		case internalIP != nil:
+			d.config.Endpoint = internalIP.String()
+		case externalIP != nil:
+			d.config.Endpoint = externalIP.String()
+		}
+	}
+
 	return nil
 }
 

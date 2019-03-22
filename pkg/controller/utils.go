@@ -18,26 +18,10 @@ import (
 
 	"github.com/gravitational/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 func runningInPod() bool {
 	return os.Getenv("POD_NAME") != ""
-}
-
-func getClientsetFromKubeconfig(path string) (*kubernetes.Clientset, error) {
-	config, err := clientcmd.BuildConfigFromFlags("", path)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return clientset, nil
 }
 
 func (c *controller) detectNodeName() error {
