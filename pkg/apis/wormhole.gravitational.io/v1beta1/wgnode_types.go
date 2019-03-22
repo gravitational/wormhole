@@ -32,9 +32,9 @@ type NodeStatus struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Node is the Schema for the nodes API
+// WGNode is the Schema for the nodes API
 // +k8s:openapi-gen=true
-type Node struct {
+type WGNode struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
@@ -44,13 +44,13 @@ type Node struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NodeList contains a list of Node
-type NodeList struct {
+// NodeList contains a list of WGNode
+type WGNodeList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Node `json:"items"`
+	Items           []WGNode `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Node{}, &NodeList{})
+	SchemeBuilder.Register(&WGNode{}, &WGNodeList{})
 }

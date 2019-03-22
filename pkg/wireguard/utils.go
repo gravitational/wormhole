@@ -132,7 +132,9 @@ func (w *wg) setPrivateKey(key string) error {
 }
 
 func (w *wg) createInterface() error {
-	return trace.ConvertSystemError(sh.Run(
+	buf := &bytes.Buffer{}
+	_, err := sh.Exec(
+		nil, buf, buf,
 		"ip",
 		"link",
 		"add",
@@ -140,18 +142,30 @@ func (w *wg) createInterface() error {
 		w.iface,
 		"type",
 		"wireguard",
-	))
+	)
+	// don't error if the interface already exists
+	if strings.Contains(buf.String(), "RTNETLINK answers: File exists") {
+		return nil
+	}
+	return trace.ConvertSystemError(err)
 }
 
 func (w *wg) setIP(ip string) error {
-	return trace.ConvertSystemError(sh.Run(
+	buf := &bytes.Buffer{}
+	_, err := sh.Exec(
+		nil, buf, buf,
 		"ip",
 		"address",
 		"add",
 		"dev",
 		w.iface,
 		ip,
-	))
+	)
+	// don't error if the interface already exists
+	if strings.Contains(buf.String(), "RTNETLINK answers: File exists") {
+		return nil
+	}
+	return trace.ConvertSystemError(err)
 }
 
 func (w *wg) setListenPort(port int) error {
@@ -165,13 +179,18 @@ func (w *wg) setListenPort(port int) error {
 }
 
 func (w *wg) setUp() error {
-	return trace.ConvertSystemError(sh.Run(
+	err := sh.Run(
 		"ip",
 		"link",
 		"set",
 		"up",
 		w.iface,
-	))
+	)
+	// skip if the interface is already up
+	if err != nil && strings.Contains(err.Error(), "file exists") {
+		return nil
+	}
+	return trace.ConvertSystemError(err)
 }
 
 func (w *wg) setDown() error {

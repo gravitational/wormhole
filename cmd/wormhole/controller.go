@@ -40,18 +40,11 @@ The controller can run either on a system when passed kubeconfig settings, or as
 func init() {
 	rootCmd.AddCommand(controllerCmd)
 	controllerCmd.Flags().StringVarP(
-		&kubeletKubeconfig,
-		"kubeconfig-kubelet",
+		&kubeconfigPath,
+		"kubeconfig",
 		"",
-		kubeletKubeconfig,
-		"Path to kubeconfig file for kubelet (which can edit node annotations)",
-	)
-	controllerCmd.Flags().StringVarP(
-		&wormholeKubeconfig,
-		"kubeconfig-wormhole",
-		"",
-		wormholeKubeconfig,
-		"Path to kubeconfig file with permission to update secrets (namespace: wormhole)",
+		kubeconfigPath,
+		"Path to kubeconfig file for controller to interact with kubernetes",
 	)
 	controllerCmd.Flags().StringVarP(
 		&nodeName,
@@ -66,6 +59,13 @@ func init() {
 		"",
 		overlayCIDR,
 		"The cidr assigned for the overlay network (each pod subnet must exist within the overlay)",
+	)
+	controllerCmd.Flags().StringVarP(
+		&nodeCIDR,
+		"node-cidr",
+		"",
+		nodeCIDR,
+		"The cidr assigned to this node",
 	)
 	controllerCmd.Flags().IntVarP(
 		&port,
@@ -91,13 +91,15 @@ func init() {
 }
 
 var (
-	kubeletKubeconfig  string
-	wormholeKubeconfig string
-	nodeName           string
-	overlayCIDR        string
-	port               = 9806
-	wireguardIface     = "wormhole-wg0"
-	bridgeIface        = "wormhole-br0"
+	kubeconfigPath string
+	nodeName       string
+	overlayCIDR    string
+	nodeCIDR       string
+	endpoint       string
+	port           = 9806
+	wireguardIface = "wormhole-wg0"
+	bridgeIface    = "wormhole-br0"
+	namespace      = "wormhole"
 )
 
 func runController(cmd *cobra.Command, args []string) error {
@@ -106,19 +108,25 @@ func runController(cmd *cobra.Command, args []string) error {
 		return trace.Wrap(err)
 	}
 
-	controller := &controller.Controller{
-		FieldLogger:    logger,
+	c, err := controller.New(controller.Config{
 		NodeName:       nodeName,
+		Namespace:      namespace,
 		OverlayCIDR:    overlayCIDR,
+		NodeCIDR:       nodeCIDR,
 		Port:           port,
 		WireguardIface: wireguardIface,
 		BridgeIface:    bridgeIface,
+		KubeconfigPath: kubeconfigPath,
+		Endpoint:       endpoint,
+	})
+	if err != nil {
+		return trace.Wrap(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err = controller.Run(ctx, kubeletKubeconfig, wormholeKubeconfig)
+	err = c.Run(ctx)
 	if err != nil {
 		return trace.Wrap(err)
 	}

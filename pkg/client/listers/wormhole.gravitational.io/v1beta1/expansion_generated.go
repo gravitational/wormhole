@@ -17,6 +17,6 @@ limitations under the License.
 
 package v1beta1
 
-// NodeListerExpansion allows custom methods to be added to
-// NodeLister.
-type NodeListerExpansion interface{}
+// WGNodeListerExpansion allows custom methods to be added to
+// WGNodeLister.
+type WGNodeListerExpansion interface{}

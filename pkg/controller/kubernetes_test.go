@@ -15,6 +15,7 @@ package controller
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	testclient "k8s.io/client-go/kubernetes/fake"
 )
@@ -130,14 +131,6 @@ func TestGenerateNodeSecret(t *testing.T) {
 		secret, err := cont.generatePeerSharedSecret(c.peerName)
 		assert.NoError(t, err, c.sharedKey)
 		assert.Equal(t, c.sharedKey, secret, c.sharedKey)
-
-		// Hack: it's not clear when using the fake kubernetes client, when writing an object, how to deterministically
-		// wait for the watcher/lister to get updated. For now, just sleep.
-		time.Sleep(time.Millisecond)
-		cont.secretController.LastSyncResourceVersion()
-		o, err := cont.secretLister.Secrets(cont.config.Namespace).Get(secretObjectName)
-		assert.NoError(t, err, c.sharedKey)
-		assert.Equal(t, c.expected, o.Data, c.sharedKey)
 	}
 }
 
@@ -149,7 +142,7 @@ func TestIntegratePeers(t *testing.T) {
 	}{
 		{
 			add: []wireguard.Peer{
-				wireguard.Peer{
+				{
 					PublicKey: "public1",
 					SharedKey: "shared1",
 					AllowedIP: []string{"10.240.1.0/24"},
@@ -157,7 +150,7 @@ func TestIntegratePeers(t *testing.T) {
 				},
 			},
 			expected: map[string]wireguard.Peer{
-				"public1": wireguard.Peer{
+				"public1": {
 					PublicKey: "public1",
 					SharedKey: "shared1",
 					AllowedIP: []string{"10.240.1.0/24"},
@@ -167,7 +160,7 @@ func TestIntegratePeers(t *testing.T) {
 		},
 		{
 			add: []wireguard.Peer{
-				wireguard.Peer{
+				{
 					PublicKey: "public2",
 					SharedKey: "shared2",
 					AllowedIP: []string{"10.240.2.0/24"},
@@ -175,13 +168,13 @@ func TestIntegratePeers(t *testing.T) {
 				},
 			},
 			expected: map[string]wireguard.Peer{
-				"public1": wireguard.Peer{
+				"public1": {
 					PublicKey: "public1",
 					SharedKey: "shared1",
 					AllowedIP: []string{"10.240.1.0/24"},
 					Endpoint:  "10.0.0.1",
 				},
-				"public2": wireguard.Peer{
+				"public2": {
 					PublicKey: "public2",
 					SharedKey: "shared2",
 					AllowedIP: []string{"10.240.2.0/24"},
@@ -191,12 +184,12 @@ func TestIntegratePeers(t *testing.T) {
 		},
 		{
 			del: []wireguard.Peer{
-				wireguard.Peer{
+				{
 					PublicKey: "public2",
 				},
 			},
 			expected: map[string]wireguard.Peer{
-				"public1": wireguard.Peer{
+				"public1": {
 					PublicKey: "public1",
 					SharedKey: "shared1",
 					AllowedIP: []string{"10.240.1.0/24"},
@@ -383,19 +376,22 @@ func TestUpdatePeerSecrets(t *testing.T) {
 }
 
 type mockWireguardInterface struct {
+	sync.Mutex
 	publicKey string
 	sharedKey string
 	peers     map[string]wireguard.Peer
 }
 
-func (m mockWireguardInterface) PublicKey() string {
+func (m *mockWireguardInterface) PublicKey() string {
 	return m.publicKey
 }
 
 func (m *mockWireguardInterface) SyncPeers(peers map[string]wireguard.Peer) {
+	m.Lock()
+	defer m.Unlock()
 	m.peers = peers
 }
 
-func (m mockWireguardInterface) GenerateSharedKey() (string, error) {
+func (m *mockWireguardInterface) GenerateSharedKey() (string, error) {
 	return m.sharedKey, nil
 }

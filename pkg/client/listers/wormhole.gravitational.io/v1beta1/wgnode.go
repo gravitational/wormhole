@@ -24,41 +24,41 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// NodeLister helps list Nodes.
-type NodeLister interface {
-	// List lists all Nodes in the indexer.
-	List(selector labels.Selector) (ret []*v1beta1.Node, err error)
-	// Get retrieves the Node from the index for a given name.
-	Get(name string) (*v1beta1.Node, error)
-	NodeListerExpansion
+// WGNodeLister helps list WGNodes.
+type WGNodeLister interface {
+	// List lists all WGNodes in the indexer.
+	List(selector labels.Selector) (ret []*v1beta1.WGNode, err error)
+	// Get retrieves the WGNode from the index for a given name.
+	Get(name string) (*v1beta1.WGNode, error)
+	WGNodeListerExpansion
 }
 
-// nodeLister implements the NodeLister interface.
-type nodeLister struct {
+// wGNodeLister implements the WGNodeLister interface.
+type wGNodeLister struct {
 	indexer cache.Indexer
 }
 
-// NewNodeLister returns a new NodeLister.
-func NewNodeLister(indexer cache.Indexer) NodeLister {
-	return &nodeLister{indexer: indexer}
+// NewWGNodeLister returns a new WGNodeLister.
+func NewWGNodeLister(indexer cache.Indexer) WGNodeLister {
+	return &wGNodeLister{indexer: indexer}
 }
 
-// List lists all Nodes in the indexer.
-func (s *nodeLister) List(selector labels.Selector) (ret []*v1beta1.Node, err error) {
+// List lists all WGNodes in the indexer.
+func (s *wGNodeLister) List(selector labels.Selector) (ret []*v1beta1.WGNode, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.Node))
+		ret = append(ret, m.(*v1beta1.WGNode))
 	})
 	return ret, err
 }
 
-// Get retrieves the Node from the index for a given name.
-func (s *nodeLister) Get(name string) (*v1beta1.Node, error) {
+// Get retrieves the WGNode from the index for a given name.
+func (s *wGNodeLister) Get(name string) (*v1beta1.WGNode, error) {
 	obj, exists, err := s.indexer.GetByKey(name)
 	if err != nil {
 		return nil, err
 	}
 	if !exists {
-		return nil, errors.NewNotFound(v1beta1.Resource("node"), name)
+		return nil, errors.NewNotFound(v1beta1.Resource("wgnode"), name)
 	}
-	return obj.(*v1beta1.Node), nil
+	return obj.(*v1beta1.WGNode), nil
 }

@@ -26,7 +26,7 @@ import (
 
 type WormholeV1beta1Interface interface {
 	RESTClient() rest.Interface
-	NodesGetter
+	WGNodesGetter
 }
 
 // WormholeV1beta1Client is used to interact with features provided by the wormhole.gravitational.io group.
@@ -34,8 +34,8 @@ type WormholeV1beta1Client struct {
 	restClient rest.Interface
 }
 
-func (c *WormholeV1beta1Client) Nodes() NodeInterface {
-	return newNodes(c)
+func (c *WormholeV1beta1Client) WGNodes() WGNodeInterface {
+	return newWGNodes(c)
 }
 
 // NewForConfig creates a new WormholeV1beta1Client for the given config.

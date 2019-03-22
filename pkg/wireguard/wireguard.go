@@ -15,6 +15,7 @@ package wireguard
 
 import (
 	"net"
+	"strings"
 	"time"
 
 	"github.com/vishvananda/netlink"
@@ -97,7 +98,7 @@ func New(config Config) (Interface, error) {
 			LinkIndex: link.Attrs().Index,
 			Dst:       &dst,
 		})
-		if err != nil {
+		if err != nil && !strings.Contains(err.Error(), "file exists") {
 			return nil, trace.Wrap(err)
 		}
 	}

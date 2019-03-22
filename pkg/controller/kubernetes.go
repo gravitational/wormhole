@@ -19,13 +19,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gravitational/trace"
 	"github.com/gravitational/wormhole/pkg/apis/wormhole.gravitational.io/v1beta1"
 	wormholelister "github.com/gravitational/wormhole/pkg/client/listers/wormhole.gravitational.io/v1beta1"
 	"github.com/gravitational/wormhole/pkg/wireguard"
 
 	"github.com/cenkalti/backoff"
-	"github.com/gravitational/trace"
-	"k8s.io/api/core/v1"
+
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -61,7 +62,7 @@ func (c *controller) initKubeObjects() error {
 
 // publishNodeInfo publishes the node configuration to the kubernetes API for the rest of the cluster to pick up
 func (c *controller) publishNodeInfo() error {
-	node := &v1beta1.Node{
+	node := &v1beta1.WGNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: c.config.NodeName,
 		},
@@ -74,10 +75,10 @@ func (c *controller) publishNodeInfo() error {
 	}
 
 	c.Debug("Attempting to publish node information object to kubernetes cluster (update)")
-	_, err := c.crdClient.WormholeV1beta1().Nodes().UpdateStatus(node)
+	_, err := c.crdClient.WormholeV1beta1().WGNodes().UpdateStatus(node)
 	if errors.IsNotFound(err) {
 		c.Debug("Attempting to publish node information object to kubernetes cluster (create)")
-		_, err = c.crdClient.WormholeV1beta1().Nodes().Create(node)
+		_, err = c.crdClient.WormholeV1beta1().WGNodes().Create(node)
 	}
 	return trace.Wrap(err)
 }
@@ -86,12 +87,12 @@ func (c *controller) startNodeWatcher(ctx context.Context) {
 	indexer, controller := cache.NewIndexerInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return c.crdClient.WormholeV1beta1().Nodes().List(options)
+				return c.crdClient.WormholeV1beta1().WGNodes().List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return c.crdClient.WormholeV1beta1().Nodes().Watch(options)
+				return c.crdClient.WormholeV1beta1().WGNodes().Watch(options)
 			},
-		}, &v1beta1.Node{},
+		}, &v1beta1.WGNode{},
 		60*time.Second,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    c.handleNodeAdded,
@@ -102,7 +103,7 @@ func (c *controller) startNodeWatcher(ctx context.Context) {
 	)
 
 	c.nodeController = controller
-	c.nodeLister = wormholelister.NewNodeLister(indexer)
+	c.nodeLister = wormholelister.NewWGNodeLister(indexer)
 
 	go c.runNodeWatcher(ctx)
 }

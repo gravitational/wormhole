@@ -170,8 +170,7 @@ func TestSyncPeers(t *testing.T) {
 	}
 
 	cases := []struct {
-		in       map[string]Peer
-		expected map[string]Peer
+		in map[string]Peer
 	}{
 		{
 			in: map[string]Peer{

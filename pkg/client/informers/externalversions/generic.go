@@ -52,8 +52,8 @@ func (f *genericInformer) Lister() cache.GenericLister {
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
 	// Group=wormhole.gravitational.io, Version=v1beta1
-	case v1beta1.SchemeGroupVersion.WithResource("nodes"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Wormhole().V1beta1().Nodes().Informer()}, nil
+	case v1beta1.SchemeGroupVersion.WithResource("wgnodes"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Wormhole().V1beta1().WGNodes().Informer()}, nil
 
 	}
 
