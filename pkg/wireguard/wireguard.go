@@ -92,10 +92,14 @@ func New(config Config) (Interface, error) {
 	// TODO(knisbet) consider making this part of the control loop, so that if the system is changed for any reason
 	// the routes will get re-created
 	for _, network := range config.OverlayNetworks {
-		netlink.RouteAdd(&netlink.Route{
+		dst := network
+		err = netlink.RouteAdd(&netlink.Route{
 			LinkIndex: link.Attrs().Index,
-			Dst:       &network,
+			Dst:       &dst,
 		})
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
 	}
 
 	return iface, nil

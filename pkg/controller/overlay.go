@@ -54,7 +54,7 @@ func (d *controller) detectOverlayCidr() error {
 }
 
 type kubeadmClusterConfiguration struct {
-	Networking map[string]string `yaml:"networking`
+	Networking map[string]string `yaml:"networking"`
 }
 
 // loadOverlayCidrFromKubeadm attempts to load kubeadm installation configuration to discover the overlay network

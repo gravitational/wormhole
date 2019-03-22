@@ -18,14 +18,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/gravitational/wormhole/pkg/apis/wormhole.gravitational.io/v1beta1"
 	wormholeclientset "github.com/gravitational/wormhole/pkg/client/clientset/versioned/fake"
 	"github.com/gravitational/wormhole/pkg/wireguard"
+
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
+	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	testclient "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -224,7 +224,7 @@ func TestIntegratePeers(t *testing.T) {
 	cont.startSecretWatcher(context.TODO())
 	cont.startNodeWatcher(context.TODO())
 
-	cont.waitForControllerSync(context.TODO())
+	_ = cont.waitForControllerSync(context.TODO())
 
 	for _, tt := range cases {
 
@@ -370,7 +370,7 @@ func TestUpdatePeerSecrets(t *testing.T) {
 
 		cont.startSecretWatcher(context.TODO())
 		cont.startNodeWatcher(context.TODO())
-		cont.waitForControllerSync(context.TODO())
+		_ = cont.waitForControllerSync(context.TODO())
 
 		err = cont.updatePeerSecrets()
 		assert.NoError(t, err, tt.sharedSecret)

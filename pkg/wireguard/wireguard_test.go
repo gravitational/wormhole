@@ -22,6 +22,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	test = "test"
+)
+
 func TestCheckDefaults(t *testing.T) {
 
 	cases := []struct {
@@ -41,21 +45,21 @@ func TestCheckDefaults(t *testing.T) {
 		},
 		{
 			in: Config{
-				InterfaceName: "test",
+				InterfaceName: test,
 				Port:          100,
 			},
 			expectErr: true,
 		},
 		{
 			in: Config{
-				InterfaceName: "test",
+				InterfaceName: test,
 				IP:            "10.2.2.5/24",
 			},
 			expectErr: true,
 		},
 		{
 			in: Config{
-				InterfaceName: "test",
+				InterfaceName: test,
 				IP:            "10.2.2.5/24",
 				Port:          100,
 			},
@@ -63,7 +67,7 @@ func TestCheckDefaults(t *testing.T) {
 		},
 		{
 			in: Config{
-				InterfaceName: "test",
+				InterfaceName: test,
 				IP:            "500.2.2.5/24",
 				Port:          100,
 			},
@@ -71,7 +75,7 @@ func TestCheckDefaults(t *testing.T) {
 		},
 		{
 			in: Config{
-				InterfaceName: "test",
+				InterfaceName: test,
 				IP:            "::1/24",
 				Port:          100,
 			},
@@ -104,7 +108,7 @@ func TestNew(t *testing.T) {
 			},
 			expected: mockWg{
 				iface:      "wg0",
-				privateKey: "test",
+				privateKey: test,
 				ip:         "10.0.0.0/24",
 				port:       1000,
 				up:         true,
@@ -210,7 +214,7 @@ func TestSyncPeers(t *testing.T) {
 	}
 
 	m := &mockWg{
-		iface: "test",
+		iface: test,
 		peers: map[string]Peer{},
 	}
 	wg0, _ := new(Config{}, m)
@@ -234,21 +238,21 @@ func (w *mockWg) genKey() (string, error) {
 	if w.err != nil {
 		return "", w.err
 	}
-	return "test", nil
+	return test, nil
 }
 
 func (w *mockWg) genPSK() (string, error) {
 	if w.err != nil {
 		return "", w.err
 	}
-	return "test", nil
+	return test, nil
 }
 
 func (w *mockWg) pubKey(key string) (string, error) {
 	if w.err != nil {
 		return "", w.err
 	}
-	return "test", nil
+	return test, nil
 }
 
 func (w *mockWg) setPrivateKey(key string) error {

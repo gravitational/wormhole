@@ -19,13 +19,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cenkalti/backoff"
-
-	"github.com/gravitational/wormhole/pkg/wireguard"
-
-	"github.com/gravitational/trace"
 	"github.com/gravitational/wormhole/pkg/apis/wormhole.gravitational.io/v1beta1"
 	wormholelister "github.com/gravitational/wormhole/pkg/client/listers/wormhole.gravitational.io/v1beta1"
+	"github.com/gravitational/wormhole/pkg/wireguard"
+
+	"github.com/cenkalti/backoff"
+	"github.com/gravitational/trace"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
