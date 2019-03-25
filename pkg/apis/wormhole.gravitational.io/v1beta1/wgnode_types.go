@@ -17,11 +17,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// NodeSpec defines the desired state of Node
-type NodeSpec struct{}
+// WgnodeSpec defines the desired state of Wgnode
+type WgnodeSpec struct {
+	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
+}
 
-// NodeStatus defines the observed state of Node
-type NodeStatus struct {
+// WgnodeStatus defines the observed state of Wgnode
+type WgnodeStatus struct {
 	Port      int    `json:"port"`
 	PublicKey string `json:"public_key"`
 	NodeCIDR  string `json:"node_cidr"`
@@ -29,28 +32,27 @@ type NodeStatus struct {
 }
 
 // +genclient
-// +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// WGNode is the Schema for the nodes API
+// Wgnode is the Schema for the wgnodes API
 // +k8s:openapi-gen=true
-type WGNode struct {
+type Wgnode struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   NodeSpec   `json:"spec,omitempty"`
-	Status NodeStatus `json:"status,omitempty"`
+	Spec   WgnodeSpec   `json:"spec,omitempty"`
+	Status WgnodeStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NodeList contains a list of WGNode
-type WGNodeList struct {
+// WgnodeList contains a list of Wgnode
+type WgnodeList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []WGNode `json:"items"`
+	Items           []Wgnode `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&WGNode{}, &WGNodeList{})
+	SchemeBuilder.Register(&Wgnode{}, &WgnodeList{})
 }

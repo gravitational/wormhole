@@ -30,58 +30,59 @@ import (
 	cache "k8s.io/client-go/tools/cache"
 )
 
-// WGNodeInformer provides access to a shared informer and lister for
-// WGNodes.
-type WGNodeInformer interface {
+// WgnodeInformer provides access to a shared informer and lister for
+// Wgnodes.
+type WgnodeInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1beta1.WGNodeLister
+	Lister() v1beta1.WgnodeLister
 }
 
-type wGNodeInformer struct {
+type wgnodeInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
+	namespace        string
 }
 
-// NewWGNodeInformer constructs a new informer for WGNode type.
+// NewWgnodeInformer constructs a new informer for Wgnode type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewWGNodeInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredWGNodeInformer(client, resyncPeriod, indexers, nil)
+func NewWgnodeInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredWgnodeInformer(client, namespace, resyncPeriod, indexers, nil)
 }
 
-// NewFilteredWGNodeInformer constructs a new informer for WGNode type.
+// NewFilteredWgnodeInformer constructs a new informer for Wgnode type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredWGNodeInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredWgnodeInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.WormholeV1beta1().WGNodes().List(options)
+				return client.WormholeV1beta1().Wgnodes(namespace).List(options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.WormholeV1beta1().WGNodes().Watch(options)
+				return client.WormholeV1beta1().Wgnodes(namespace).Watch(options)
 			},
 		},
-		&wormholegravitationaliov1beta1.WGNode{},
+		&wormholegravitationaliov1beta1.Wgnode{},
 		resyncPeriod,
 		indexers,
 	)
 }
 
-func (f *wGNodeInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredWGNodeInformer(client, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+func (f *wgnodeInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+	return NewFilteredWgnodeInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *wGNodeInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&wormholegravitationaliov1beta1.WGNode{}, f.defaultInformer)
+func (f *wgnodeInformer) Informer() cache.SharedIndexInformer {
+	return f.factory.InformerFor(&wormholegravitationaliov1beta1.Wgnode{}, f.defaultInformer)
 }
 
-func (f *wGNodeInformer) Lister() v1beta1.WGNodeLister {
-	return v1beta1.NewWGNodeLister(f.Informer().GetIndexer())
+func (f *wgnodeInformer) Lister() v1beta1.WgnodeLister {
+	return v1beta1.NewWgnodeLister(f.Informer().GetIndexer())
 }

@@ -17,4 +17,4 @@ limitations under the License.
 
 package v1beta1
 
-type WGNodeExpansion interface{}
+type WgnodeExpansion interface{}

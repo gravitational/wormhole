@@ -17,6 +17,10 @@ limitations under the License.
 
 package v1beta1
 
-// WGNodeListerExpansion allows custom methods to be added to
-// WGNodeLister.
-type WGNodeListerExpansion interface{}
+// WgnodeListerExpansion allows custom methods to be added to
+// WgnodeLister.
+type WgnodeListerExpansion interface{}
+
+// WgnodeNamespaceListerExpansion allows custom methods to be added to
+// WgnodeNamespaceLister.
+type WgnodeNamespaceListerExpansion interface{}

@@ -38,17 +38,20 @@ required = [
 
 [[constraint]]
   name = "k8s.io/code-generator"
-  branch = "release-1.13"
+  version = "kubernetes-1.13.4"
 
 [[constraint]]
   name = "k8s.io/api"
-  branch = "release-1.13"
+  version = "kubernetes-1.13.4"
 
 [[constraint]]
   name = "k8s.io/apimachinery"
-  branch = "release-1.13"
+  version = "kubernetes-1.13.4"
 
 [[constraint]]
   name = "k8s.io/client-go"
-  branch = "release-10.0"
+  version = "kubernetes-1.13.4"
 
+[[constraint]]
+  name = "sigs.k8s.io/controller-runtime"
+  branch = "master"

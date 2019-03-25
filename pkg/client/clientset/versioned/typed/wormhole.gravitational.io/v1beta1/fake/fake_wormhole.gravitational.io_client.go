@@ -27,8 +27,8 @@ type FakeWormholeV1beta1 struct {
 	*testing.Fake
 }
 
-func (c *FakeWormholeV1beta1) WGNodes() v1beta1.WGNodeInterface {
-	return &FakeWGNodes{c}
+func (c *FakeWormholeV1beta1) Wgnodes(namespace string) v1beta1.WgnodeInterface {
+	return &FakeWgnodes{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate

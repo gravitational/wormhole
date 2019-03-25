@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
+
 	"github.com/gravitational/trace"
 	"github.com/gravitational/wormhole/pkg/apis/wormhole.gravitational.io/v1beta1"
 	wormholelister "github.com/gravitational/wormhole/pkg/client/listers/wormhole.gravitational.io/v1beta1"
@@ -62,37 +64,59 @@ func (c *controller) initKubeObjects() error {
 
 // publishNodeInfo publishes the node configuration to the kubernetes API for the rest of the cluster to pick up
 func (c *controller) publishNodeInfo() error {
-	node := &v1beta1.WGNode{
+
+	node := &v1beta1.Wgnode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: c.config.NodeName,
 		},
-		Status: v1beta1.NodeStatus{
+		Status: v1beta1.WgnodeStatus{
 			Port:      c.config.Port,
 			PublicKey: c.wireguardInterface.PublicKey(),
 			NodeCIDR:  c.config.NodeCIDR,
 			Endpoint:  c.config.Endpoint,
 		},
 	}
+	_, err := c.crdClient.WormholeV1beta1().Wgnodes(c.config.Namespace).Create(node)
+	if err == nil {
+		return nil
+	}
+	if errors.IsAlreadyExists(err) {
+		node, err = c.crdClient.WormholeV1beta1().Wgnodes(c.config.Namespace).Get(c.config.NodeName, metav1.GetOptions{})
+		if err != nil {
+			return trace.Wrap(err)
+		}
 
-	c.Debug("Attempting to publish node information object to kubernetes cluster (update)")
-	_, err := c.crdClient.WormholeV1beta1().WGNodes().UpdateStatus(node)
-	if errors.IsNotFound(err) {
-		c.Debug("Attempting to publish node information object to kubernetes cluster (create)")
-		_, err = c.crdClient.WormholeV1beta1().WGNodes().Create(node)
+		node.Status.Port = c.config.Port
+		node.Status.PublicKey = c.wireguardInterface.PublicKey()
+		node.Status.NodeCIDR = c.config.NodeCIDR
+		node.Status.Endpoint = c.config.Endpoint
+
+		_, err = c.crdClient.WormholeV1beta1().Wgnodes(c.config.Namespace).Update(node)
 	}
 	return trace.Wrap(err)
+	/*
+		c.Debug("Attempting to publish node information object to kubernetes cluster (update)")
+		c.Warn(spew.Sdump(node))
+		_, err := c.crdClient.WormholeV1beta1().Wgnodes(c.config.Namespace).Update(node)
+		if errors.IsNotFound(err) {
+			c.Debug("Update error: ", err)
+			c.Debug("Attempting to publish node information object to kubernetes cluster (create)")
+
+		}
+		return trace.Wrap(err)
+	*/
 }
 
 func (c *controller) startNodeWatcher(ctx context.Context) {
 	indexer, controller := cache.NewIndexerInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return c.crdClient.WormholeV1beta1().WGNodes().List(options)
+				return c.crdClient.WormholeV1beta1().Wgnodes(c.config.Namespace).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return c.crdClient.WormholeV1beta1().WGNodes().Watch(options)
+				return c.crdClient.WormholeV1beta1().Wgnodes(c.config.Namespace).Watch(options)
 			},
-		}, &v1beta1.WGNode{},
+		}, &v1beta1.Wgnode{},
 		60*time.Second,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    c.handleNodeAdded,
@@ -103,7 +127,7 @@ func (c *controller) startNodeWatcher(ctx context.Context) {
 	)
 
 	c.nodeController = controller
-	c.nodeLister = wormholelister.NewWGNodeLister(indexer)
+	c.nodeLister = wormholelister.NewWgnodeLister(indexer)
 
 	go c.runNodeWatcher(ctx)
 }
@@ -143,7 +167,7 @@ func (c *controller) startSecretWatcher(ctx context.Context) {
 				return c.client.CoreV1().Secrets(c.config.Namespace).Watch(options)
 			},
 		}, &v1.Secret{},
-		60*time.Second,
+		15*time.Second,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    c.handleSecretAdded,
 			UpdateFunc: c.handleSecretUpdated,
@@ -198,11 +222,15 @@ func (c *controller) waitForControllerSync(ctx context.Context) error {
 }
 
 func (c *controller) syncWithWireguard() error {
+	c.Debug("Re-syncing wireguard configuration")
+	defer c.Debug("Re-sync wireguard complete")
+
 	nodes, err := c.nodeLister.List(labels.NewSelector())
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
+	c.Debugf("Get secret %v/%v", c.config.Namespace, secretObjectName)
 	sharedSecrets, err := c.secretLister.Secrets(c.config.Namespace).Get(secretObjectName)
 	if err != nil {
 		return trace.Wrap(err)
@@ -210,6 +238,7 @@ func (c *controller) syncWithWireguard() error {
 
 	peers := make(map[string]wireguard.Peer, len(nodes))
 
+	c.Debugf("Generate desired peers")
 	for _, node := range nodes {
 		// we don't connect to ourselves
 		if node.Name == c.config.NodeName {
@@ -228,9 +257,10 @@ func (c *controller) syncWithWireguard() error {
 			PublicKey: node.Status.PublicKey,
 			SharedKey: string(ss),
 			AllowedIP: []string{node.Status.NodeCIDR},
-			Endpoint:  node.Status.Endpoint,
+			Endpoint:  fmt.Sprintf("%v:%v", node.Status.Endpoint, node.Status.Port),
 		}
 	}
+	c.Debug("Sync with wireguard interface: ", spew.Sdump(peers))
 	c.wireguardInterface.SyncPeers(peers)
 
 	return nil
@@ -257,6 +287,9 @@ func (c *controller) updatePeerSecrets() error {
 	}
 
 	for _, node := range nodes {
+		if node.Name == c.config.NodeName {
+			continue
+		}
 		psk, err := c.wireguardInterface.GenerateSharedKey()
 		if err != nil {
 			return trace.Wrap(err)
@@ -275,6 +308,9 @@ func (c *controller) updatePeerSecrets() error {
 }
 
 func (c *controller) retryGeneratePeerSharedSecret(peer string) error {
+	if peer == c.config.NodeName {
+		return nil
+	}
 	err := backoff.Retry(func() error {
 		_, err := c.generatePeerSharedSecret(peer)
 		return trace.Wrap(err)

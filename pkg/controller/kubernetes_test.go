@@ -31,6 +31,7 @@ import (
 )
 
 func TestPublishNodeInfo(t *testing.T) {
+
 	cases := []struct {
 		publicKey string
 		nodeName  string
@@ -48,8 +49,9 @@ func TestPublishNodeInfo(t *testing.T) {
 			FieldLogger: logrus.WithField("logger", "test"),
 			crdClient:   wormholeclientset.NewSimpleClientset(),
 			config: Config{
-				NodeName: c.nodeName,
-				Port:     c.port,
+				NodeName:  c.nodeName,
+				Namespace: "test",
+				Port:      c.port,
 			},
 			wireguardInterface: &mockWireguardInterface{
 				publicKey: c.publicKey,
@@ -66,9 +68,9 @@ func TestPublishNodeInfo(t *testing.T) {
 		err = cont.publishNodeInfo()
 		assert.NoError(t, err, c.nodeName)
 
-		crd, err := cont.crdClient.WormholeV1beta1().Nodes().Get(c.nodeName, metav1.GetOptions{})
+		crd, err := cont.crdClient.WormholeV1beta1().Wgnodes("test").Get(c.nodeName, metav1.GetOptions{})
 		assert.NoError(t, err, c.nodeName)
-		assert.Equal(t, v1beta1.NodeStatus{
+		assert.Equal(t, v1beta1.WgnodeStatus{
 			Port:      c.port,
 			PublicKey: c.publicKey,
 		}, crd.Status, c.nodeName)
@@ -222,11 +224,11 @@ func TestIntegratePeers(t *testing.T) {
 	for _, tt := range cases {
 
 		for _, add := range tt.add {
-			_, err = cont.crdClient.WormholeV1beta1().Nodes().Create(&v1beta1.Node{
+			_, err = cont.crdClient.WormholeV1beta1().Wgnodes("test").Create(&v1beta1.Wgnode{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: add.PublicKey,
 				},
-				Status: v1beta1.NodeStatus{
+				Status: v1beta1.WgnodeStatus{
 					Port:      1000,
 					PublicKey: add.PublicKey,
 					NodeCIDR:  add.AllowedIP[0],
@@ -241,7 +243,7 @@ func TestIntegratePeers(t *testing.T) {
 		}
 
 		for _, del := range tt.del {
-			err = cont.crdClient.WormholeV1beta1().Nodes().Delete(del.PublicKey, &metav1.DeleteOptions{})
+			err = cont.crdClient.WormholeV1beta1().Wgnodes("test").Delete(del.PublicKey, &metav1.DeleteOptions{})
 			assert.NoError(t, err, "%v", del)
 		}
 
@@ -270,12 +272,12 @@ func TestInitKubeObjects(t *testing.T) {
 
 func TestUpdatePeerSecrets(t *testing.T) {
 	cases := []struct {
-		nodes        []*v1beta1.Node
+		nodes        []*v1beta1.Wgnode
 		secret       *v1.Secret
 		sharedSecret string
 	}{
 		{
-			nodes: []*v1beta1.Node{
+			nodes: []*v1beta1.Wgnode{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test1",
@@ -294,7 +296,7 @@ func TestUpdatePeerSecrets(t *testing.T) {
 			sharedSecret: "secret1",
 		},
 		{
-			nodes: []*v1beta1.Node{
+			nodes: []*v1beta1.Wgnode{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test1",
@@ -357,7 +359,7 @@ func TestUpdatePeerSecrets(t *testing.T) {
 		assert.NoError(t, err, tt.sharedSecret)
 
 		for _, n := range tt.nodes {
-			_, err := cont.crdClient.WormholeV1beta1().Nodes().Create(n)
+			_, err := cont.crdClient.WormholeV1beta1().Wgnodes("test").Create(n)
 			assert.NoError(t, err, tt.sharedSecret)
 		}
 

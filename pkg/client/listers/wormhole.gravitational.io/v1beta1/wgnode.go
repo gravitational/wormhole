@@ -24,41 +24,70 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// WGNodeLister helps list WGNodes.
-type WGNodeLister interface {
-	// List lists all WGNodes in the indexer.
-	List(selector labels.Selector) (ret []*v1beta1.WGNode, err error)
-	// Get retrieves the WGNode from the index for a given name.
-	Get(name string) (*v1beta1.WGNode, error)
-	WGNodeListerExpansion
+// WgnodeLister helps list Wgnodes.
+type WgnodeLister interface {
+	// List lists all Wgnodes in the indexer.
+	List(selector labels.Selector) (ret []*v1beta1.Wgnode, err error)
+	// Wgnodes returns an object that can list and get Wgnodes.
+	Wgnodes(namespace string) WgnodeNamespaceLister
+	WgnodeListerExpansion
 }
 
-// wGNodeLister implements the WGNodeLister interface.
-type wGNodeLister struct {
+// wgnodeLister implements the WgnodeLister interface.
+type wgnodeLister struct {
 	indexer cache.Indexer
 }
 
-// NewWGNodeLister returns a new WGNodeLister.
-func NewWGNodeLister(indexer cache.Indexer) WGNodeLister {
-	return &wGNodeLister{indexer: indexer}
+// NewWgnodeLister returns a new WgnodeLister.
+func NewWgnodeLister(indexer cache.Indexer) WgnodeLister {
+	return &wgnodeLister{indexer: indexer}
 }
 
-// List lists all WGNodes in the indexer.
-func (s *wGNodeLister) List(selector labels.Selector) (ret []*v1beta1.WGNode, err error) {
+// List lists all Wgnodes in the indexer.
+func (s *wgnodeLister) List(selector labels.Selector) (ret []*v1beta1.Wgnode, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.WGNode))
+		ret = append(ret, m.(*v1beta1.Wgnode))
 	})
 	return ret, err
 }
 
-// Get retrieves the WGNode from the index for a given name.
-func (s *wGNodeLister) Get(name string) (*v1beta1.WGNode, error) {
-	obj, exists, err := s.indexer.GetByKey(name)
+// Wgnodes returns an object that can list and get Wgnodes.
+func (s *wgnodeLister) Wgnodes(namespace string) WgnodeNamespaceLister {
+	return wgnodeNamespaceLister{indexer: s.indexer, namespace: namespace}
+}
+
+// WgnodeNamespaceLister helps list and get Wgnodes.
+type WgnodeNamespaceLister interface {
+	// List lists all Wgnodes in the indexer for a given namespace.
+	List(selector labels.Selector) (ret []*v1beta1.Wgnode, err error)
+	// Get retrieves the Wgnode from the indexer for a given namespace and name.
+	Get(name string) (*v1beta1.Wgnode, error)
+	WgnodeNamespaceListerExpansion
+}
+
+// wgnodeNamespaceLister implements the WgnodeNamespaceLister
+// interface.
+type wgnodeNamespaceLister struct {
+	indexer   cache.Indexer
+	namespace string
+}
+
+// List lists all Wgnodes in the indexer for a given namespace.
+func (s wgnodeNamespaceLister) List(selector labels.Selector) (ret []*v1beta1.Wgnode, err error) {
+	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1beta1.Wgnode))
+	})
+	return ret, err
+}
+
+// Get retrieves the Wgnode from the indexer for a given namespace and name.
+func (s wgnodeNamespaceLister) Get(name string) (*v1beta1.Wgnode, error) {
+	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err
 	}
 	if !exists {
 		return nil, errors.NewNotFound(v1beta1.Resource("wgnode"), name)
 	}
-	return obj.(*v1beta1.WGNode), nil
+	return obj.(*v1beta1.Wgnode), nil
 }

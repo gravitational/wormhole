@@ -23,8 +23,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
-	// WGNodes returns a WGNodeInformer.
-	WGNodes() WGNodeInformer
+	// Wgnodes returns a WgnodeInformer.
+	Wgnodes() WgnodeInformer
 }
 
 type version struct {
@@ -38,7 +38,7 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// WGNodes returns a WGNodeInformer.
-func (v *version) WGNodes() WGNodeInformer {
-	return &wGNodeInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+// Wgnodes returns a WgnodeInformer.
+func (v *version) Wgnodes() WgnodeInformer {
+	return &wgnodeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

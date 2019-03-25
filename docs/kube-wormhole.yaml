@@ -7,9 +7,9 @@ metadata:
 spec:
   group: wormhole.gravitational.io
   names:
-    kind: wgnode
+    kind: Wgnode
     plural: wgnodes
-  scope: Cluster
+  scope: Namespaced
   version: v1beta1
 status:
   acceptedNames:
@@ -107,6 +107,7 @@ rules:
       - watch
       - list
       - create
+      - update
     resourceNames:
 #      - wormhole
   - apiGroups:
@@ -213,11 +214,12 @@ spec:
         # Run a wormhole container on each node
         # Configures wireguard / CNI on each node
         - name: wormhole
-          image: quay.io/gravitational/wormhole-dev:0.0.1-3-g4ab1c9f-dirty
+          image: quay.io/gravitational/wormhole-dev:0.0.1-4-g0aa9a48-dirty
           command:
             - /wormhole
           args:
             - controller
+            - --debug
           env:
             - name: POD_NAME
               valueFrom:

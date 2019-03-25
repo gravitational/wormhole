@@ -88,6 +88,13 @@ func init() {
 		bridgeIface,
 		"The name of the internal bridge to create (default wormhole-br0)",
 	)
+	controllerCmd.Flags().BoolVarP(
+		&debug,
+		"debug",
+		"",
+		debug,
+		"Enable debug logging",
+	)
 }
 
 var (

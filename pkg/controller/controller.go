@@ -84,15 +84,17 @@ type controller struct {
 	wireguardInterface wireguard.Interface
 
 	nodeController cache.Controller
-	nodeLister     wormholelister.WGNodeLister
+	nodeLister     wormholelister.WgnodeLister
 
 	secretController cache.Controller
 	secretLister     listers.SecretLister
 }
 
 func New(config Config) (Controller, error) {
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
 	controller := &controller{
-		FieldLogger: logrus.New(),
+		FieldLogger: logger,
 		config:      config,
 	}
 

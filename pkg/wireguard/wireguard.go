@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
+
 	"github.com/vishvananda/netlink"
 
 	"github.com/gravitational/trace"
@@ -143,8 +145,11 @@ func new(config Config, wg Wg) (*iface, error) {
 		return nil, trace.Wrap(err)
 	}
 
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+
 	return &iface{
-		FieldLogger: logrus.WithField(trace.Component, "iface"),
+		FieldLogger: logger.WithField(trace.Component, "iface"),
 		publicKey:   pubKey,
 		wg:          wg,
 	}, nil
@@ -187,11 +192,13 @@ func (i iface) SyncPeers(peers map[string]Peer) {
 		i.Warn("Error reading peers from wireguard.")
 		return
 	}
+	i.Debug("peer status: ", spew.Sdump(peerStatuses))
 
 	// iterate through each peer, and find the corresponding desired peer
 	// peer = local wireguard peer
 	// desiredPeer = peer as per k8s API
 	for _, peerStatus := range peerStatuses {
+		i.Debug("Checking peer: ", peerStatus.PublicKey)
 		desiredPeer, ok := peers[peerStatus.PublicKey]
 		if ok {
 			// if there is a difference in the peer, delete and re-add the peer
@@ -223,6 +230,7 @@ func (i iface) SyncPeers(peers map[string]Peer) {
 	}
 
 	// iterate over each desired peer, looking for a peer missing in wireguard
+	i.Debug("Checking for missing peers")
 	for _, desiredPeer := range peers {
 		if _, ok := peerStatuses[desiredPeer.PublicKey]; !ok {
 			err = i.wg.addPeer(desiredPeer)

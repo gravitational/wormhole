@@ -228,6 +228,9 @@ func (w *wg) removePeer(peerPublicKey string) error {
 func (w *wg) addPeer(peer Peer) error {
 	w.Lock()
 	defer w.Unlock()
+	if w.sharedSecrets == nil {
+		w.sharedSecrets = make(map[string]string)
+	}
 	w.sharedSecrets[peer.PublicKey] = peer.SharedKey
 
 	// it looks like wireguard only accepts key's by file
@@ -269,6 +272,9 @@ func (w *wg) getPeers() (map[string]PeerStatus, error) {
 
 	results := make(map[string]PeerStatus)
 
+	w.Lock()
+	defer w.Unlock()
+
 	for _, line := range strings.Split(o, "\n")[1:] {
 		c := strings.Split(line, "\t")
 		if len(c) != 8 {
@@ -300,9 +306,6 @@ func (w *wg) getPeers() (map[string]PeerStatus, error) {
 				return nil, trace.WrapWithMessage(err, "Error parsing int64: %v", c[4])
 			}
 		}
-
-		w.Lock()
-		defer w.Unlock()
 
 		results[c[0]] = PeerStatus{
 			PublicKey:     c[0],

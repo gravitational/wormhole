@@ -29,14 +29,6 @@
   version = "v2.1.1"
 
 [[projects]]
-  digest = "1:34ceb5f13772dfdb0d32e374a2ccdff625619b5f7fd7ba29ef365e5f5c1023f9"
-  name = "github.com/cloudflare/cfssl"
-  packages = ["log"]
-  pruneopts = "T"
-  revision = "5d63dbd981b5c408effbb58c442d54761ff94fbd"
-  version = "1.3.2"
-
-[[projects]]
   digest = "1:60b95a4be187c8b8a72fdc1bd8d351ae05d98da6e65950b2a68c71ad9c3009f4"
   name = "github.com/coreos/go-iptables"
   packages = ["iptables"]
@@ -436,7 +428,6 @@
   version = "v2.2.1"
 
 [[projects]]
-  branch = "release-1.13"
   digest = "1:a361d526b77e9f68ba9f5d6f2f24e58e00d87f837b1d4cfc977047a37a7522cf"
   name = "k8s.io/api"
   packages = [
@@ -475,9 +466,9 @@
   ]
   pruneopts = "T"
   revision = "5cb15d34447165a97c76ed5a60e4e99c8a01ecfe"
+  version = "kubernetes-1.13.4"
 
 [[projects]]
-  branch = "release-1.13"
   digest = "1:82717527f44f2cb9a2a784a427a7ab9bd7f883848bdfabcf70bef8e300b69fa5"
   name = "k8s.io/apimachinery"
   packages = [
@@ -526,10 +517,10 @@
   ]
   pruneopts = "T"
   revision = "86fb29eff6288413d76bd8506874fddd9fccdff0"
+  version = "kubernetes-1.13.4"
 
 [[projects]]
-  branch = "release-10.0"
-  digest = "1:2f627a97480c9cf291aabc20649c564cf26b2c666116a2e9a17d10c3aea4eae8"
+  digest = "1:00cdd77acb3883ae851a1cd8c2b3ede01cd974dd9283ff4022f98dbb6e1455dd"
   name = "k8s.io/client-go"
   packages = [
     "discovery",
@@ -629,10 +620,10 @@
     "util/retry",
   ]
   pruneopts = "T"
-  revision = "7621a5ebb88b1e49ce7e7837ae8e99ca030a3c13"
+  revision = "b40b2a5939e43f7ffe0028ad67586b7ce50bb675"
+  version = "kubernetes-1.13.4"
 
 [[projects]]
-  branch = "release-1.13"
   digest = "1:dc1ae99dcab96913d81ae970b1f7a7411a54199b14bfb17a7e86f9a56979c720"
   name = "k8s.io/code-generator"
   packages = [
@@ -648,6 +639,7 @@
   ]
   pruneopts = "T"
   revision = "c2090bec4d9b1fb25de3812f868accc2bc9ecbae"
+  version = "kubernetes-1.13.4"
 
 [[projects]]
   branch = "master"
@@ -683,7 +675,7 @@
   branch = "master"
   digest = "1:b42fd86ef09195c24fbde1b6cfc35b0b4ce22dfc7b35b2c6d47dbbeaf05ea61f"
   name = "sigs.k8s.io/controller-runtime"
-  packages = ["pkg/runtime/scheme"]
+  packages = ["pkg/scheme"]
   pruneopts = "T"
   revision = "881047043d34d65d54b2ce02bccc309c7b348f07"
 
@@ -700,7 +692,6 @@
   analyzer-version = 1
   input-imports = [
     "github.com/cenkalti/backoff",
-    "github.com/cloudflare/cfssl/log",
     "github.com/coreos/go-iptables/iptables",
     "github.com/davecgh/go-spew/spew",
     "github.com/gravitational/trace",
@@ -735,7 +726,7 @@
     "k8s.io/client-go/tools/clientcmd",
     "k8s.io/client-go/util/flowcontrol",
     "k8s.io/code-generator/cmd/client-gen",
-    "sigs.k8s.io/controller-runtime/pkg/runtime/scheme",
+    "sigs.k8s.io/controller-runtime/pkg/scheme",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
