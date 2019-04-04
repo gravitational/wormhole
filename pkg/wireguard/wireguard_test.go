@@ -270,6 +270,13 @@ func (w *mockWg) createInterface() error {
 	return nil
 }
 
+func (w *mockWg) deleteInterface() error {
+	if w.err != nil {
+		return w.err
+	}
+	return nil
+}
+
 func (w *mockWg) setIP(ip string) error {
 	if w.err != nil {
 		return w.err

@@ -39,6 +39,7 @@ type Wg interface {
 	pubKey(string) (string, error)
 	setPrivateKey(string) error
 	createInterface() error
+	deleteInterface() error
 	setIP(string) error
 	setListenPort(int) error
 	setUp() error
@@ -144,7 +145,26 @@ func (w *wg) createInterface() error {
 		"wireguard",
 	)
 	// don't error if the interface already exists
+	// TODO(knisbet) look into using netlink so we're not matching error strings
 	if strings.Contains(buf.String(), "RTNETLINK answers: File exists") {
+		return nil
+	}
+	return trace.ConvertSystemError(err)
+}
+
+func (w *wg) deleteInterface() error {
+	buf := &bytes.Buffer{}
+	_, err := sh.Exec(
+		nil, buf, buf,
+		"ip",
+		"link",
+		"delete",
+		"dev",
+		w.iface,
+	)
+	// don't error if the interface doesn't exist
+	// TODO(knisbet) look into using netlink so we're not matching error strings
+	if strings.Contains(buf.String(), "Cannot find device") {
 		return nil
 	}
 	return trace.ConvertSystemError(err)

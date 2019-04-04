@@ -121,6 +121,11 @@ func new(config Config, wg Wg) (*iface, error) {
 		return nil, trace.Wrap(err)
 	}
 
+	err = wg.deleteInterface()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
 	err = wg.createInterface()
 	if err != nil {
 		return nil, trace.Wrap(err)
