@@ -12,6 +12,7 @@ Wormhole does not implement network policy, instead we recommend to use [calico]
 The Gravitational Wormhole project is currently considered experimental, and has not undergone any external security audits. Use at your own risk.
 </aside>
 
+
 ## Getting Started
 
 ### System Requirements
@@ -24,14 +25,7 @@ kubectl apply -f https://raw.githubusercontent.com/gravitational/wormhole/master
 ```
 
 
-## Build
-
-To build and publish to you're own docker registry
-```
-WORM_REGISTRY_IMAGE="quay.io/gravitational/wormhole" make publish
-```
-
-or
+## Build and Publish to a docker registry
 
 ```
 WORM_REGISTRY_IMAGE="quay.io/gravitational/wormhole" go run mage.go build:publish
@@ -40,20 +34,22 @@ WORM_REGISTRY_IMAGE="quay.io/gravitational/wormhole" go run mage.go build:publis
 ## Test
 
 ```
-make test
-```
-
-or
-
-```
 go run mage.go test:all
 ```
+
 
 ## More Information
 - [Wormhole RFC](docs/rfcs/0001-spec.md)
 
 ## Contributing
 The best way to contribute is to create issues or pull requests right here on Github. You can also reach the Gravitational team through their [website](https://gravitational.com)
+
+## Resources
+|Project Links| Description
+|---|----
+| [Blog](http://blog.gravitational.com) | Our blog, where we publish gravitational news |
+| [Security Updates](https://groups.google.com/forum/#!forum/gravity-community-security) | Gravity Community Security Updates |
+| [Community Forum](https://community.gravitational.com) | Gravitational Community Forum|
 
 ## Who Built Wormhole?
 Wormhole was created by [Gravitational Inc.](https://gravitational.com) We have built wormhole by leveraging our experience automating and supporting hundreds of kubernetes clusters with [Gravity](https://gravitational.com/gravity/), our Kubernetes distribution optimized for deploying and remotely controlling complex applications into multiple environments at the same time:
