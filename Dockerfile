@@ -1,7 +1,11 @@
+ARG WIREGUARD_IMAGE
+ARG BASE_IMAGE
+ARG RIGGING_IMAGE
+
 #
-# Use a build container to get the wg cli
+# Use a tempoary ubuntu container to get/build the wg cli
 #
-FROM ubuntu:18.10 as wireguard
+FROM ${WIREGUARD_IMAGE} as wireguard
 ADD assets/docker/wireguard/wireguard_ubuntu_wireguard.gpg /etc/apt/trusted.gpg.d/wireguard_ubuntu_wireguard.gpg
 ADD assets/docker/wireguard/wireguard-ubuntu-wireguard-bionic.list /etc/apt/sources.list.d/wireguard-ubuntu-wireguard-bionic.list
 
@@ -10,14 +14,14 @@ RUN apt-get update && \
     wireguard
 
 #
-# Rigging container to copy rig binary for gravity installations
+# Pull in rig container to copy rig binary to support gravity upgrade/rollback
 #
-FROM quay.io/gravitational/rig:5.3.1 as rig
+FROM ${RIGGING_IMAGE} as rig
 
 #
 # Build wormhole container
 #
-FROM ubuntu:18.10
+FROM ${BASE_IMAGE}
 
 ARG CNI_VERSION
 ARG ARCH
@@ -42,13 +46,15 @@ ADD docs/gravity-wormhole.yaml /gravity/wormhole.yaml
 ADD scripts/gravity* /gravity/
 RUN sed -i "s/__REPLACE_VERSION__/$VERSION/g" /gravity/wormhole.yaml
 
-
+#
+# Copy WG cli
+#
 COPY --from=wireguard /usr/bin/wg /usr/bin/wg
 
-# Get a copy of CNI plugins, so we can copy them to the host
+# Get a copy of CNI plugins, so we can install them on the host if needed
 RUN mkdir -p /opt/cni/bin && curl -L --retry 5 https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-${ARCH}-${CNI_VERSION}.tgz \
     | tar -xz -C /opt/cni/bin ./bridge ./loopback ./host-local ./portmap ./tuning
 
-ADD build/wormhole /wormhole
 
+ADD build/wormhole /wormhole
 CMD ["/wormhole"]  

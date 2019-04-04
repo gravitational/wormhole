@@ -37,10 +37,17 @@ var (
 	golangciVersion = "v1.15.0"
 
 	// cniVersion is the version of cni plugin binaries to ship
-	cniVersion = "v0.7.1"
+	cniVersion = "v0.7.5"
 
 	// registryImage is the docker tag to use to push the container to the requested registry
 	registryImage = env("WORM_REGISTRY_IMAGE", "quay.io/gravitational/wormhole-dev")
+
+	// baseImage is the base OS image to use for wormhole containers
+	baseImage = "ubuntu:18.10"
+	// wireguardBuildImage is the docker image to use to build the wg cli tool
+	wireguardBuildImage = "ubuntu:18.10"
+	// rigImage is the imageref to get the rigging tool from
+	rigImage = "quay.io/gravitational/rig:5.3.1"
 )
 
 // env, loads a variable from the environment, or uses the provided default
@@ -99,7 +106,7 @@ func (Build) Go() error {
 	return trace.Wrap(err)
 }
 
-// DockerBuild builds a docker image for this project
+// Docker packages wormhole into a docker container
 func (Build) Docker() error {
 	mg.Deps(Build.Go)
 	fmt.Println("\n=====> Building Gravitational Wormhole Docker Image...\n")
@@ -116,12 +123,19 @@ func (Build) Docker() error {
 		"ARCH=amd64",
 		"--build-arg",
 		fmt.Sprint("VERSION=", version()),
+		"--build-arg",
+		fmt.Sprint("WIREGUARD_IMAGE=", wireguardBuildImage),
+		"--build-arg",
+		fmt.Sprint("BASE_IMAGE=", baseImage),
+		"--build-arg",
+		fmt.Sprint("RIGGING_IMAGE=", rigImage),
 		"-f",
 		"Dockerfile",
 		".",
 	))
 }
 
+// Publish tags and publishes the built container to the configured registry
 func (Build) Publish() error {
 	mg.Deps(Build.Docker)
 	fmt.Println("\n=====> Publishing Gravitational Wormhole Docker Image...\n")
@@ -143,8 +157,9 @@ func (Build) Publish() error {
 	))
 }
 
+// BuildContainer creates a docker container as a consistent golang environment to use for software builds
 func (Build) BuildContainer() error {
-
+	fmt.Println("\n=====> Creating build container...\n")
 	return trace.Wrap(sh.RunV(
 		"docker",
 		"build",
@@ -163,11 +178,13 @@ func (Build) BuildContainer() error {
 
 type Test mg.Namespace
 
+// All runs all defined test
 func (Test) All() error {
 	mg.Deps(Test.Unit, Test.Lint)
 	return nil
 }
 
+// Unit runs unit tests with the race detector enabled
 func (Test) Unit() error {
 	mg.Deps(Build.BuildContainer)
 	fmt.Println("\n=====> Running Gravitational Wormhole Unit Tests...\n")
@@ -206,6 +223,26 @@ func (Test) Lint() error {
 		"-c",
 		"cd /go/src/github.com/gravitational/wormhole; golangci-lint run --deadline=30m --enable-all"+
 			" -D gochecknoglobals -D gochecknoinits",
+	))
+}
+
+type CodeGen mg.Namespace
+
+// Update runs the code generator and updates the generated CRD client
+func (CodeGen) Update() error {
+	fmt.Println("\n=====> Running hack/update-codegen.sh...\n")
+
+	return trace.Wrap(sh.RunV(
+		"hack/update-codegen.sh",
+	))
+}
+
+// Verify checks whether the code gen is up to date
+func (CodeGen) Verify() error {
+	fmt.Println("\n=====> Running hack/verify-codegen.sh...\n")
+
+	return trace.Wrap(sh.RunV(
+		"hack/verify-codegen.sh",
 	))
 }
 

@@ -218,8 +218,9 @@ func TestSyncPeers(t *testing.T) {
 	}
 	wg0, _ := new(Config{}, m)
 	for _, c := range cases {
-		wg0.SyncPeers(c.in)
-		assert.Equal(t, c.in, m.peers, spew.Sdump(c.in))
+		err := wg0.SyncPeers(c.in)
+		assert.NoError(t, err, c.in)
+		assert.Equal(t, c.in, m.peers, c.in)
 	}
 }
 

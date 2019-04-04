@@ -45,7 +45,7 @@ func (d *controller) configureCNI() error {
 				//     the bridge MTU plays into this, again, having a large mtu should be more efficient for pod-to-pod
 				//     traffic between hosts.
 				//   - If the network driver supports/has segmentation offload enabled, having large internal frames
-				//     should also be more efficient. So pod -> internet traffic is segmented by the ethernet hardware.
+				//     should also be more efficient. So pod -> internet traffic is segmented by the nic if enabled.
 				//   - Also need to check into, whether we're getting a correct MSS, all of this is wasted if we're
 				//     using a standard MSS in the TCP handshake
 				"mtu": 65535,

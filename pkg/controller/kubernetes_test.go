@@ -77,65 +77,6 @@ func TestPublishNodeInfo(t *testing.T) {
 	}
 }
 
-func TestGenerateNodeSecret(t *testing.T) {
-	cases := []struct {
-		peerName  string
-		sharedKey string
-		expected  map[string][]byte
-	}{
-		{
-			peerName:  "peer1",
-			sharedKey: "shared1",
-			expected: map[string][]byte{
-				"shared-secret-peer1-testNode1": []byte("shared1"),
-			},
-		},
-		{
-			peerName:  "peer2",
-			sharedKey: "shared2",
-			expected: map[string][]byte{
-				"shared-secret-peer1-testNode1": []byte("shared1"),
-				"shared-secret-peer2-testNode1": []byte("shared2"),
-			},
-		},
-		{
-			peerName:  "peer1",
-			sharedKey: "shared3",
-			expected: map[string][]byte{
-				"shared-secret-peer1-testNode1": []byte("shared3"),
-				"shared-secret-peer2-testNode1": []byte("shared2"),
-			},
-		},
-	}
-
-	wgi := mockWireguardInterface{}
-
-	cont := &controller{
-		FieldLogger: logrus.WithField("logger", "test"),
-		client:      testclient.NewSimpleClientset(),
-		config: Config{
-			NodeName:  "testNode1",
-			Namespace: "test",
-		},
-		wireguardInterface: &wgi,
-	}
-	logrus.SetLevel(logrus.DebugLevel)
-	err := cont.initKubeObjects()
-	assert.NoError(t, err, "init kube objects")
-	cont.startSecretWatcher(context.TODO())
-
-	for !cont.secretController.HasSynced() {
-		time.Sleep(time.Millisecond)
-	}
-
-	for _, c := range cases {
-		wgi.sharedKey = c.sharedKey
-		secret, err := cont.generatePeerSharedSecret(c.peerName)
-		assert.NoError(t, err, c.sharedKey)
-		assert.Equal(t, c.sharedKey, secret, c.sharedKey)
-	}
-}
-
 func TestIntegratePeers(t *testing.T) {
 	cases := []struct {
 		add      []wireguard.Peer
@@ -156,7 +97,7 @@ func TestIntegratePeers(t *testing.T) {
 					PublicKey: "public1",
 					SharedKey: "shared1",
 					AllowedIP: []string{"10.240.1.0/24"},
-					Endpoint:  "10.0.0.1",
+					Endpoint:  "10.0.0.1:1000",
 				},
 			},
 		},
@@ -174,13 +115,13 @@ func TestIntegratePeers(t *testing.T) {
 					PublicKey: "public1",
 					SharedKey: "shared1",
 					AllowedIP: []string{"10.240.1.0/24"},
-					Endpoint:  "10.0.0.1",
+					Endpoint:  "10.0.0.1:1000",
 				},
 				"public2": {
 					PublicKey: "public2",
 					SharedKey: "shared2",
 					AllowedIP: []string{"10.240.2.0/24"},
-					Endpoint:  "10.0.0.2",
+					Endpoint:  "10.0.0.2:1000",
 				},
 			},
 		},
@@ -195,7 +136,7 @@ func TestIntegratePeers(t *testing.T) {
 					PublicKey: "public1",
 					SharedKey: "shared1",
 					AllowedIP: []string{"10.240.1.0/24"},
-					Endpoint:  "10.0.0.1",
+					Endpoint:  "10.0.0.1:1000",
 				},
 			},
 		},
@@ -208,8 +149,9 @@ func TestIntegratePeers(t *testing.T) {
 		client:      testclient.NewSimpleClientset(),
 		crdClient:   wormholeclientset.NewSimpleClientset(),
 		config: Config{
-			NodeName:  "test-node",
-			Namespace: "test",
+			NodeName:     "test-node",
+			Namespace:    "test",
+			SyncInterval: 100 * time.Millisecond,
 		},
 		wireguardInterface: &wgi,
 	}
@@ -238,8 +180,6 @@ func TestIntegratePeers(t *testing.T) {
 			assert.NoError(t, err, "%v", add)
 
 			wgi.sharedKey = add.SharedKey
-			err = cont.retryGeneratePeerSharedSecret(add.PublicKey)
-			assert.NoError(t, err, "%v", tt)
 		}
 
 		for _, del := range tt.del {
@@ -250,6 +190,10 @@ func TestIntegratePeers(t *testing.T) {
 		// Hack: it's not clear when using the fake kubernetes client, when writing an object, how to deterministically
 		// wait for the watcher/lister to get updated. For now, just sleep.
 		time.Sleep(5 * time.Millisecond)
+
+		err = cont.updatePeerSecrets(false)
+		assert.NoError(t, err, "%v", tt)
+
 		err = cont.syncWithWireguard()
 		assert.NoError(t, err, "%v", tt)
 		assert.NotNil(t, wgi.peers, "%v", tt)
@@ -275,6 +219,7 @@ func TestUpdatePeerSecrets(t *testing.T) {
 		nodes        []*v1beta1.Wgnode
 		secret       *v1.Secret
 		sharedSecret string
+		overwrite    bool
 	}{
 		{
 			nodes: []*v1beta1.Wgnode{
@@ -294,14 +239,10 @@ func TestUpdatePeerSecrets(t *testing.T) {
 				},
 			},
 			sharedSecret: "secret1",
+			overwrite:    true,
 		},
 		{
 			nodes: []*v1beta1.Wgnode{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test1",
-					},
-				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test2",
@@ -337,27 +278,52 @@ func TestUpdatePeerSecrets(t *testing.T) {
 				},
 			},
 			sharedSecret: "secret2",
+			overwrite:    true,
+		},
+		{
+			nodes: []*v1beta1.Wgnode{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test6",
+					},
+				},
+			},
+			secret: &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretObjectName,
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"shared-secret-test0-test1": []byte("secret2"),
+					"shared-secret-test0-test2": []byte("secret2"),
+					"shared-secret-test0-test3": []byte("secret2"),
+					"shared-secret-test0-test4": []byte("secret2"),
+					"shared-secret-test0-test5": []byte("secret2"),
+					"shared-secret-test0-test6": []byte("secret3"),
+				},
+			},
+			sharedSecret: "secret3",
+			overwrite:    false,
 		},
 	}
 
+	wgi := mockWireguardInterface{}
+
+	cont := &controller{
+		FieldLogger: logrus.WithField("logger", "test"),
+		client:      testclient.NewSimpleClientset(),
+		crdClient:   wormholeclientset.NewSimpleClientset(),
+		config: Config{
+			NodeName:  "test0",
+			Namespace: "test",
+		},
+		wireguardInterface: &wgi,
+	}
+	err := cont.initKubeObjects()
+	assert.NoError(t, err, "kube init")
+
 	for _, tt := range cases {
-		wgi := mockWireguardInterface{
-			sharedKey: tt.sharedSecret,
-		}
-
-		cont := &controller{
-			FieldLogger: logrus.WithField("logger", "test"),
-			client:      testclient.NewSimpleClientset(),
-			crdClient:   wormholeclientset.NewSimpleClientset(),
-			config: Config{
-				NodeName:  "test0",
-				Namespace: "test",
-			},
-			wireguardInterface: &wgi,
-		}
-		err := cont.initKubeObjects()
-		assert.NoError(t, err, tt.sharedSecret)
-
+		wgi.sharedKey = tt.sharedSecret
 		for _, n := range tt.nodes {
 			_, err := cont.crdClient.WormholeV1beta1().Wgnodes("test").Create(n)
 			assert.NoError(t, err, tt.sharedSecret)
@@ -367,7 +333,7 @@ func TestUpdatePeerSecrets(t *testing.T) {
 		cont.startNodeWatcher(context.TODO())
 		_ = cont.waitForControllerSync(context.TODO())
 
-		err = cont.updatePeerSecrets()
+		err = cont.updatePeerSecrets(tt.overwrite)
 		assert.NoError(t, err, tt.sharedSecret)
 
 		secrets, err := cont.client.CoreV1().Secrets("test").Get(secretObjectName, metav1.GetOptions{})
@@ -388,10 +354,11 @@ func (m *mockWireguardInterface) PublicKey() string {
 	return m.publicKey
 }
 
-func (m *mockWireguardInterface) SyncPeers(peers map[string]wireguard.Peer) {
+func (m *mockWireguardInterface) SyncPeers(peers map[string]wireguard.Peer) error {
 	m.Lock()
 	defer m.Unlock()
 	m.peers = peers
+	return nil
 }
 
 func (m *mockWireguardInterface) GenerateSharedKey() (string, error) {

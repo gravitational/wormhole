@@ -32,16 +32,16 @@ metadata:
   name: wormhole
   namespace: wormhole
 spec:
-  allowPrivilegeEscalation: true
+  allowPrivilegeEscalation: false
   allowedCapabilities: ["NET_ADMIN"]
-  hostPID: true
+  hostPID: false
   fsGroup:
     rule: RunAsAny
-  hostNetwork: true
+  hostNetwork: false
   hostPorts:
   - max: 65535
     min: 1024
-  privileged: true
+  privileged: false
   runAsUser:
     rule: RunAsAny
   seLinux:
@@ -108,16 +108,6 @@ rules:
       - list
       - create
       - update
-    resourceNames:
-#      - wormhole
-  - apiGroups:
-      - ""
-    resources:
-      - configmaps
-    verbs:
-      - get
-    resourceNames:
-      - kubeadm-config
   - apiGroups:
       - ""
     resources:
@@ -214,12 +204,11 @@ spec:
         # Run a wormhole container on each node
         # Configures wireguard / CNI on each node
         - name: wormhole
-          image: quay.io/gravitational/wormhole-dev:0.0.1-4-g0aa9a48-dirty
+          image: quay.io/gravitational/wormhole-dev:0.0.1-5-g672d3a7-dirty
           command:
             - /wormhole
           args:
             - controller
-            - --debug
           env:
             - name: POD_NAME
               valueFrom:
@@ -231,21 +220,21 @@ spec:
                   fieldPath: metadata.namespace
           securityContext:
             privileged: false
+            readOnlyRootFilesystem: true
             capabilities:
               add: ["NET_ADMIN"]
           imagePullPolicy: Always
           resources:
             requests:
-              cpu: 250m
+              cpu: 100m
+              memory: 100m
           volumeMounts:
             - mountPath: /host/opt/cni/bin
               name: cni-bin-dir
             - mountPath: /host/etc/cni/net.d
               name: cni-net-dir
-            - mountPath: /var/lib/kubelet/pki/
-              name: kubelet-pki-dir
-            - mountPath: /etc/kubernetes/kubelet.conf
-              name: kubelet-kubeconfig
+            - mountPath: /tmp
+              name: tmpfs
       volumes:
         # Used to install CNI.
         - name: cni-bin-dir
@@ -254,9 +243,6 @@ spec:
         - name: cni-net-dir
           hostPath:
             path: /etc/cni/net.d
-        - name: kubelet-pki-dir
-          hostPath:
-            path: /var/lib/kubelet/pki/
-        - name: kubelet-kubeconfig
-          hostPath:
-            path: /etc/kubernetes/kubelet.conf
+        - name: tmpfs
+          emptyDir:
+            medium: Memory

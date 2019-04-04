@@ -67,6 +67,13 @@ func init() {
 		nodeCIDR,
 		"The cidr assigned to this node",
 	)
+	controllerCmd.Flags().StringVarP(
+		&endpoint,
+		"endpoint",
+		"",
+		endpoint,
+		"The endpoint to use for wireguard connections (detected by default from kubernetes node object)",
+	)
 	controllerCmd.Flags().IntVarP(
 		&port,
 		"port",
@@ -125,6 +132,7 @@ func runController(cmd *cobra.Command, args []string) error {
 		BridgeIface:    bridgeIface,
 		KubeconfigPath: kubeconfigPath,
 		Endpoint:       endpoint,
+		EnableDebug:    debug,
 	})
 	if err != nil {
 		return trace.Wrap(err)
@@ -145,7 +153,9 @@ func runController(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// syncCniBin tries to detect if we have a host mounted cni bin, and if we do, copy the cni binaries to the host
+// syncCniBin attempts to copy CNI plugins to the host
+// When running as a container, the host /opt/cni/bin directory should be mounted under /host
+// If the /host/opt/cni/bin directory exists, copy the plugins to the host
 func syncCniBin() error {
 	if _, err := os.Stat("/host/opt/cni/bin"); !os.IsNotExist(err) {
 		err = sh.Run("bash", "-c", "cp /opt/cni/bin/* /host/opt/cni/bin/")

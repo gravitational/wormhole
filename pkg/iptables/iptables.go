@@ -38,6 +38,7 @@ type Config struct {
 
 	WireguardIface string
 	BridgeIface    string
+	SyncInterval   time.Duration
 
 	iptables *iptables.IPTables
 }
@@ -46,6 +47,10 @@ func (c *Config) Run(ctx context.Context) error {
 	ipt, err := iptables.New()
 	if err != nil {
 		return trace.Wrap(err)
+	}
+
+	if c.SyncInterval == 0 {
+		return trace.BadParameter("Sync interval must be set")
 	}
 
 	c.iptables = ipt
@@ -64,7 +69,7 @@ func (c *Config) Run(ctx context.Context) error {
 }
 
 func (c *Config) sync(ctx context.Context) {
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(c.SyncInterval)
 	defer c.cleanupRules()
 
 	for {

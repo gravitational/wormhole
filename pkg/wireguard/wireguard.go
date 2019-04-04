@@ -23,7 +23,6 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"github.com/gravitational/trace"
-	"github.com/prometheus/common/log"
 	"github.com/sirupsen/logrus"
 )
 
@@ -36,6 +35,8 @@ type Config struct {
 	Port int
 	// OverlayNetworks is the IP range(s) for the entire overlay network
 	OverlayNetworks []net.IPNet
+	// EnableDebug enable debug logging
+	EnableDebug bool
 }
 
 type Peer struct {
@@ -58,7 +59,7 @@ type PeerStatus struct {
 
 type Interface interface {
 	PublicKey() string
-	SyncPeers(map[string]Peer)
+	SyncPeers(map[string]Peer) error
 	GenerateSharedKey() (string, error)
 }
 
@@ -146,7 +147,9 @@ func new(config Config, wg Wg) (*iface, error) {
 	}
 
 	logger := logrus.New()
-	logger.SetLevel(logrus.DebugLevel)
+	if config.EnableDebug {
+		logger.SetLevel(logrus.DebugLevel)
+	}
 
 	return &iface{
 		FieldLogger: logger.WithField(trace.Component, "iface"),
@@ -183,14 +186,14 @@ func (i iface) PublicKey() string {
 	return i.publicKey
 }
 
-func (i iface) SyncPeers(peers map[string]Peer) {
+func (i iface) SyncPeers(peers map[string]Peer) error {
 	i.Debug("Syncing peers to wireguard.")
 
 	// get the peers that are locally configured within wireguard
 	peerStatuses, err := i.wg.getPeers()
 	if err != nil {
 		i.Warn("Error reading peers from wireguard.")
-		return
+		return trace.Wrap(err)
 	}
 	i.Debug("peer status: ", spew.Sdump(peerStatuses))
 
@@ -198,7 +201,6 @@ func (i iface) SyncPeers(peers map[string]Peer) {
 	// peer = local wireguard peer
 	// desiredPeer = peer as per k8s API
 	for _, peerStatus := range peerStatuses {
-		i.Debug("Checking peer: ", peerStatus.PublicKey)
 		desiredPeer, ok := peers[peerStatus.PublicKey]
 		if ok {
 			// if there is a difference in the peer, delete and re-add the peer
@@ -208,12 +210,12 @@ func (i iface) SyncPeers(peers map[string]Peer) {
 
 				err = i.wg.removePeer(peerStatus.PublicKey)
 				if err != nil {
-					log.Warn("Error removing peer: ", trace.DebugReport(err))
+					return trace.Wrap(err)
 				}
 
 				err = i.wg.addPeer(desiredPeer)
 				if err != nil {
-					log.Warn("Error recreating peer: ", trace.DebugReport(err))
+					return trace.Wrap(err)
 				}
 			}
 		} else {
@@ -224,7 +226,7 @@ func (i iface) SyncPeers(peers map[string]Peer) {
 
 			err = i.wg.removePeer(peerStatus.PublicKey)
 			if err != nil {
-				log.Warn("Error recreating peer: ", trace.DebugReport(err))
+				return trace.Wrap(err)
 			}
 		}
 	}
@@ -235,12 +237,13 @@ func (i iface) SyncPeers(peers map[string]Peer) {
 		if _, ok := peerStatuses[desiredPeer.PublicKey]; !ok {
 			err = i.wg.addPeer(desiredPeer)
 			if err != nil {
-				log.Warn("Error creating peer: ", trace.DebugReport(err))
+				return trace.Wrap(err)
 			}
 		}
 	}
 
 	i.Debug("Syncing peers to wireguard complete.")
+	return nil
 }
 
 func (i iface) GenerateSharedKey() (string, error) {

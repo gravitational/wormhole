@@ -36,32 +36,36 @@ type Config struct {
 	// NodeName is the name of the k8s node this instance is running on
 	NodeName string
 
-	// Namespace is the namespace that wormhole is running in for syncing state
+	// Namespace is the kubernetes namespace to use for syncing wormhole objects
 	Namespace string
 
-	// OverlayCIDR is the IP network CIDR for the entire overlay network
+	// OverlayCIDR is the IP network in CIDR format for the entire overlay network
 	OverlayCIDR string
 
-	// NodeCIDR is the IP network CIDR for this particular node
+	// NodeCIDR is the IP network in CIDR format assigned to this node
 	NodeCIDR string
 
-	// Port is the external port wireguard should listen on for tunnels
+	// Port is the external port wireguard should listen on between hosts
 	Port int
 
-	// WireguardIface is the name of the wireguard interface to create
+	// WireguardIface is the name of the wireguard interface for encrypted node to node traffic
 	WireguardIface string
 
-	// BridgeIface is the name of the bridge to create
+	// BridgeIface is the name of the linux bridge to create internal to the host
 	BridgeIface string
 
-	// Kubeconfig path is the path to a kubeconfig file for wormhole state exchange
+	// Kubeconfig path is the path to a kubeconfig file to access the kubernetes API
 	KubeconfigPath string
 
-	// ResyncPeriod is how frequently to re-sync state between each component
-	ResyncPeriod time.Duration
+	// SyncInterval is how frequently to re-sync state between each component
+	SyncInterval time.Duration
 
 	// Endpoint is the networking address that is available for routing between all wireguard nodes
+	// In general this should be the same as the AdvertiseIP Address of the node
 	Endpoint string
+
+	// EnableDebug enable debug logging
+	EnableDebug bool
 }
 
 type Controller interface {
@@ -88,14 +92,21 @@ type controller struct {
 
 	secretController cache.Controller
 	secretLister     listers.SecretLister
+
+	errC    chan error
+	resyncC chan interface{}
 }
 
 func New(config Config) (Controller, error) {
 	logger := logrus.New()
-	logger.SetLevel(logrus.DebugLevel)
+	if config.EnableDebug {
+		logger.SetLevel(logrus.DebugLevel)
+	}
 	controller := &controller{
 		FieldLogger: logger,
 		config:      config,
+		errC:        make(chan error, 1),
+		resyncC:     make(chan interface{}, 1),
 	}
 
 	return controller, trace.Wrap(controller.init())
@@ -157,8 +168,8 @@ func (d *controller) init() error {
 		return trace.Wrap(err)
 	}
 
-	if d.config.ResyncPeriod == 0 {
-		d.config.ResyncPeriod = 60 * time.Second
+	if d.config.SyncInterval == 0 {
+		d.config.SyncInterval = 60 * time.Second
 	}
 
 	d.Info("Initialization complete.")
@@ -178,7 +189,20 @@ func (d *controller) Run(ctx context.Context) error {
 	d.Info("  Pod Address Start:           ", d.ipamInfo.podAddrStart)
 	d.Info("  Pod Address End:             ", d.ipamInfo.podAddrEnd)
 	d.Info("  Kubeconfig Path:             ", d.config.KubeconfigPath)
-	d.Info("  Resync Period:               ", d.config.ResyncPeriod)
+	d.Info("  Resync Period:               ", d.config.SyncInterval)
+
+	iptablesSync := iptables.Config{
+		FieldLogger:    d.FieldLogger.WithField("module", "iptables"),
+		OverlayCIDR:    d.config.OverlayCIDR,
+		PodCIDR:        d.config.NodeCIDR,
+		WireguardIface: d.config.WireguardIface,
+		BridgeIface:    d.config.BridgeIface,
+		SyncInterval:   d.config.SyncInterval,
+	}
+	err := iptablesSync.Run(ctx)
+	if err != nil {
+		return trace.Wrap(err)
+	}
 
 	_, overlayNetwork, err := net.ParseCIDR(d.config.OverlayCIDR)
 	if err != nil {
@@ -191,6 +215,7 @@ func (d *controller) Run(ctx context.Context) error {
 		OverlayNetworks: []net.IPNet{
 			*overlayNetwork,
 		},
+		EnableDebug: d.config.EnableDebug,
 	})
 	if err != nil {
 		return trace.Wrap(err)
@@ -206,7 +231,6 @@ func (d *controller) Run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	// initialize the kubernetes secret object
 	err = d.initKubeObjects()
 	if err != nil {
 		return trace.Wrap(err)
@@ -220,25 +244,37 @@ func (d *controller) Run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	err = d.updatePeerSecrets()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	iptablesSync := iptables.Config{
-		FieldLogger:    d.FieldLogger.WithField("module", "iptables"),
-		OverlayCIDR:    d.config.OverlayCIDR,
-		PodCIDR:        d.config.NodeCIDR,
-		WireguardIface: d.config.WireguardIface,
-		BridgeIface:    d.config.BridgeIface,
-	}
-	err = iptablesSync.Run(ctx)
+	err = d.updatePeerSecrets(true)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	d.Info("Wormhole is running")
+	return trace.Wrap(d.run(ctx))
+}
 
-	<-ctx.Done()
-	return trace.Wrap(ctx.Err())
+func (d *controller) run(ctx context.Context) error {
+	syncTimer := time.NewTicker(d.config.SyncInterval)
+	defer syncTimer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return trace.Wrap(ctx.Err())
+		case err := <-d.errC:
+			return trace.Wrap(err)
+		case <-d.resyncC:
+			d.resync()
+			err := d.updatePeerSecrets(false)
+			if err != nil {
+				d.WithError(err).Warn("Failed to update peer secrets")
+			}
+		case <-syncTimer.C:
+			d.resync()
+			err := d.updatePeerSecrets(false)
+			if err != nil {
+				d.WithError(err).Warn("Failed to update peer secrets")
+			}
+		}
+	}
 }
