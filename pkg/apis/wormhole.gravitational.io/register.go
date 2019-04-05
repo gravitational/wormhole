@@ -14,5 +14,6 @@ limitations under the License.
 package wormholegravitationalio
 
 const (
+	// GroupName is the kubernetes CRD group name for this object
 	GroupName = "wormhole.gravitational.io"
 )

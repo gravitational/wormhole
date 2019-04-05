@@ -25,10 +25,14 @@ type WgnodeSpec struct {
 
 // WgnodeStatus defines the observed state of Wgnode
 type WgnodeStatus struct {
-	Port      int    `json:"port"`
+	// Port is the port to connect to wireguard on this host
+	Port int `json:"port"`
+	// PublicKey is the public key of the wireguard node
 	PublicKey string `json:"public_key"`
-	NodeCIDR  string `json:"node_cidr"`
-	Endpoint  string `json:"endpoint"`
+	// NodeCIDR is the IP address range in CIDR format assigned to this node
+	NodeCIDR string `json:"node_cidr"`
+	// Endpoint is the IP address to connect to this node
+	Endpoint string `json:"endpoint"`
 }
 
 // +genclient

@@ -3,7 +3,7 @@ ARG BASE_IMAGE
 ARG RIGGING_IMAGE
 
 #
-# Use a tempoary ubuntu container to get/build the wg cli
+# Use a temporary ubuntu container to get/build the wg cli
 #
 FROM ${WIREGUARD_IMAGE} as wireguard
 ADD assets/docker/wireguard/wireguard_ubuntu_wireguard.gpg /etc/apt/trusted.gpg.d/wireguard_ubuntu_wireguard.gpg

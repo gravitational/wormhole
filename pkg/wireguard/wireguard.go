@@ -32,29 +32,39 @@ type Config struct {
 	// IP Address to assign to the interface
 	IP string
 	// External Port to have wireguard listen on
-	Port int
+	ListenPort int
 	// OverlayNetworks is the IP range(s) for the entire overlay network
 	OverlayNetworks []net.IPNet
-	// EnableDebug enable debug logging
-	EnableDebug bool
 }
 
 type Peer struct {
+	// PublicKey is the wireguard public key of the peer
 	PublicKey string
+	// SharedKey is the shared secret between the local instance and the peer
 	SharedKey string
+	// AllowedIP is the list of CIDR's to accept between hosts
 	AllowedIP []string
-	Endpoint  string
+	// Endpoint is the IP:Port endpoint of the peer
+	Endpoint string
 }
 
 type PeerStatus struct {
-	PublicKey     string
-	SharedKey     string
-	Endpoint      string
-	AllowedIP     string
+	// PublicKey is the wireguard public key of the peer
+	PublicKey string
+	// SharedKey is the shared secret between the local instance and the peer
+	SharedKey string
+	// Endpoint is the IP:Port endpoint of the peer
+	Endpoint string
+	// AllowedIP is a CSV of the allowed IP ranges of the peer
+	AllowedIP string
+	// LastHandshakeTime is the timestamp of the last handshake with the peer
 	LastHandshake time.Time
-	BytesTX       int64
-	BytesRX       int64
-	Keepalive     int
+	// BytesTX is the number of bytes transmitted to the peer
+	BytesTX int64
+	// BytesRX is the number of bytes received from the peer
+	BytesRX int64
+	//Keepalive is the number of second to keep the connection alive
+	Keepalive int
 }
 
 type Interface interface {
@@ -71,7 +81,7 @@ type iface struct {
 	wg        Wg
 }
 
-func New(config Config) (Interface, error) {
+func New(config Config, logger logrus.FieldLogger) (Interface, error) {
 	err := config.CheckAndSetDefaults()
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -81,7 +91,7 @@ func New(config Config) (Interface, error) {
 		iface: config.InterfaceName,
 	}
 
-	iface, err := new(config, wg)
+	iface, err := new(config, wg, logger)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -110,7 +120,7 @@ func New(config Config) (Interface, error) {
 
 }
 
-func new(config Config, wg Wg) (*iface, error) {
+func new(config Config, wg Wg, logger logrus.FieldLogger) (*iface, error) {
 	key, err := wg.genKey()
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -141,7 +151,7 @@ func new(config Config, wg Wg) (*iface, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	err = wg.setListenPort(config.Port)
+	err = wg.setListenPort(config.ListenPort)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -149,11 +159,6 @@ func new(config Config, wg Wg) (*iface, error) {
 	err = wg.setUp()
 	if err != nil {
 		return nil, trace.Wrap(err)
-	}
-
-	logger := logrus.New()
-	if config.EnableDebug {
-		logger.SetLevel(logrus.DebugLevel)
 	}
 
 	return &iface{
@@ -170,7 +175,7 @@ func (c *Config) CheckAndSetDefaults() error {
 	if c.IP == "" {
 		return trace.BadParameter("IP address is required")
 	}
-	if c.Port == 0 {
+	if c.ListenPort == 0 {
 		return trace.BadParameter("Port is required")
 	}
 
@@ -227,7 +232,7 @@ func (i iface) SyncPeers(peers map[string]Peer) error {
 			// peer doesn't exist in desired peers, so we should delete from wireguard
 
 			log := i.WithField("peer", peerStatus.PublicKey)
-			log.Infof("Deletining unexpected peer: %+v", peerStatus.ToPeer())
+			log.Infof("Deleting unexpected peer: %+v", peerStatus.ToPeer())
 
 			err = i.wg.removePeer(peerStatus.PublicKey)
 			if err != nil {

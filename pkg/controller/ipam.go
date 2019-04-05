@@ -66,11 +66,12 @@ func (d *controller) detectIPAM() error {
 			}
 		}
 
-		switch {
-		case internalIP != nil:
-			d.config.Endpoint = internalIP.String()
-		case externalIP != nil:
+		if externalIP != nil {
 			d.config.Endpoint = externalIP.String()
+		}
+		// internalIP takes precedence since we're connecting internally
+		if internalIP != nil {
+			d.config.Endpoint = internalIP.String()
 		}
 	}
 

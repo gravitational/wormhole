@@ -3,7 +3,7 @@ Wormhole is a simple [CNI plugin](https://github.com/containernetworking/cni) de
 
 [WireGuard](https://www.wireguard.com) is a fascinating Fast, Modern, Secure VPN tunnel, that has been gaining significant praise from security experts, and is currently proposed for inclusion within the linux kernel.
 
-Wormhole uses wireguard to create a simple and secure high performance encrypted overlay network for kubernetes clusters, that is easy to manage and troubleshoot.
+Wormhole uses WireGuard to create a simple and secure high performance encrypted overlay network for kubernetes clusters, that is easy to manage and troubleshoot.
 
 Wormhole does not implement network policy, instead we recommend to use [calico](https://github.com/projectcalico/calico) or [kube-router](https://github.com/cloudnativelabs/kube-router) as network policy controllers.
 
@@ -16,7 +16,7 @@ The Gravitational Wormhole project is currently considered experimental, and has
 ## Getting Started
 
 ### System Requirements
-1. [Wireguard](https://www.wireguard.com/install/) is installed on each node in you're cluster.
+1. [WireGuard](https://www.wireguard.com/install/) is installed on each node in you're cluster.
 2. A Kubernetes cluster with IPAM enabled (--pod-network-cidr= when using kubeadm based install)
 
 ### Install

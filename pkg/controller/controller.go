@@ -45,8 +45,8 @@ type Config struct {
 	// NodeCIDR is the IP network in CIDR format assigned to this node
 	NodeCIDR string
 
-	// Port is the external port wireguard should listen on between hosts
-	Port int
+	// ListenPort is the external port wireguard should listen on between hosts
+	ListenPort int
 
 	// WireguardIface is the name of the wireguard interface for encrypted node to node traffic
 	WireguardIface string
@@ -63,9 +63,6 @@ type Config struct {
 	// Endpoint is the networking address that is available for routing between all wireguard nodes
 	// In general this should be the same as the AdvertiseIP Address of the node
 	Endpoint string
-
-	// EnableDebug enable debug logging
-	EnableDebug bool
 }
 
 type Controller interface {
@@ -84,6 +81,9 @@ type controller struct {
 	// ipamInfo is IPAM info about the node
 	ipamInfo *ipamInfo
 
+	//overlayCidr is the IP network for the entire overlay network
+	overlayCIDR net.IPNet
+
 	// wireguardInterface is a controller for managing / updating our wireguard interface
 	wireguardInterface wireguard.Interface
 
@@ -93,19 +93,13 @@ type controller struct {
 	secretController cache.Controller
 	secretLister     listers.SecretLister
 
-	errC    chan error
 	resyncC chan interface{}
 }
 
-func New(config Config) (Controller, error) {
-	logger := logrus.New()
-	if config.EnableDebug {
-		logger.SetLevel(logrus.DebugLevel)
-	}
+func New(config Config, logger logrus.FieldLogger) (Controller, error) {
 	controller := &controller{
 		FieldLogger: logger,
 		config:      config,
-		errC:        make(chan error, 1),
 		resyncC:     make(chan interface{}, 1),
 	}
 
@@ -149,11 +143,16 @@ func (d *controller) init() error {
 
 	if d.config.OverlayCIDR == "" {
 		d.Info("Attempting to detect overlay network address range.")
-		err = d.detectOverlayCidr()
+		err = d.detectOverlayCIDR()
 		if err != nil {
 			return trace.Wrap(err)
 		}
 	}
+	_, overlayNetwork, err := net.ParseCIDR(d.config.OverlayCIDR)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	d.overlayCIDR = *overlayNetwork
 
 	if d.config.NodeCIDR == "" {
 		d.Info("Attempting to detect node network address range")
@@ -179,7 +178,7 @@ func (d *controller) init() error {
 func (d *controller) Run(ctx context.Context) error {
 	d.Info("Running wormhole controller.")
 	d.Info("  Node Name:                   ", d.config.NodeName)
-	d.Info("  Port:                        ", d.config.Port)
+	d.Info("  Port:                        ", d.config.ListenPort)
 	d.Info("  Overlay Network:             ", d.config.OverlayCIDR)
 	d.Info("  Node Network:                ", d.config.NodeCIDR)
 	d.Info("  Wireguard Interface Name:    ", d.config.WireguardIface)
@@ -204,19 +203,14 @@ func (d *controller) Run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	_, overlayNetwork, err := net.ParseCIDR(d.config.OverlayCIDR)
-	if err != nil {
-		return trace.Wrap(err)
-	}
 	d.wireguardInterface, err = wireguard.New(wireguard.Config{
 		InterfaceName: d.config.WireguardIface,
 		IP:            d.ipamInfo.wireguardAddr,
-		Port:          d.config.Port,
+		ListenPort:    d.config.ListenPort,
 		OverlayNetworks: []net.IPNet{
-			*overlayNetwork,
+			d.overlayCIDR,
 		},
-		EnableDebug: d.config.EnableDebug,
-	})
+	}, d.FieldLogger)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -261,19 +255,15 @@ func (d *controller) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return trace.Wrap(ctx.Err())
-		case err := <-d.errC:
-			return trace.Wrap(err)
 		case <-d.resyncC:
-			d.resync()
-			err := d.updatePeerSecrets(false)
+			err := d.resync()
 			if err != nil {
-				d.WithError(err).Warn("Failed to update peer secrets")
+				return trace.Wrap(err)
 			}
 		case <-syncTimer.C:
-			d.resync()
-			err := d.updatePeerSecrets(false)
+			err := d.resync()
 			if err != nil {
-				d.WithError(err).Warn("Failed to update peer secrets")
+				return trace.Wrap(err)
 			}
 		}
 	}

@@ -19,6 +19,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/magefile/mage/sh"
 
 	"github.com/gravitational/trace"
@@ -122,18 +124,22 @@ func runController(cmd *cobra.Command, args []string) error {
 		return trace.Wrap(err)
 	}
 
+	logger := logrus.New()
+	if debug {
+		logger.SetLevel(logrus.DebugLevel)
+	}
+
 	c, err := controller.New(controller.Config{
 		NodeName:       nodeName,
 		Namespace:      namespace,
 		OverlayCIDR:    overlayCIDR,
 		NodeCIDR:       nodeCIDR,
-		Port:           port,
+		ListenPort:     port,
 		WireguardIface: wireguardIface,
 		BridgeIface:    bridgeIface,
 		KubeconfigPath: kubeconfigPath,
 		Endpoint:       endpoint,
-		EnableDebug:    debug,
-	})
+	}, logger)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -141,15 +147,19 @@ func runController(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	go func() {
+		signalC := make(chan os.Signal, 1)
+		signal.Notify(signalC, os.Interrupt, syscall.SIGTERM)
+
+		<-signalC
+		cancel()
+	}()
+
 	err = c.Run(ctx)
-	if err != nil {
+	if err != nil && trace.Unwrap(err) != context.Canceled {
 		return trace.Wrap(err)
 	}
 
-	signalC := make(chan os.Signal, 2)
-	signal.Notify(signalC, os.Interrupt, syscall.SIGTERM)
-
-	<-signalC
 	return nil
 }
 

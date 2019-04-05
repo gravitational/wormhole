@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/stretchr/testify/assert"
@@ -38,22 +40,15 @@ func TestCheckDefaults(t *testing.T) {
 		},
 		{
 			in: Config{
-				IP:   "10.2.2.5",
-				Port: 100,
+				IP:         "10.2.2.5",
+				ListenPort: 100,
 			},
 			expectErr: true,
 		},
 		{
 			in: Config{
 				InterfaceName: test,
-				Port:          100,
-			},
-			expectErr: true,
-		},
-		{
-			in: Config{
-				InterfaceName: test,
-				IP:            "10.2.2.5/24",
+				ListenPort:    100,
 			},
 			expectErr: true,
 		},
@@ -61,7 +56,14 @@ func TestCheckDefaults(t *testing.T) {
 			in: Config{
 				InterfaceName: test,
 				IP:            "10.2.2.5/24",
-				Port:          100,
+			},
+			expectErr: true,
+		},
+		{
+			in: Config{
+				InterfaceName: test,
+				IP:            "10.2.2.5/24",
+				ListenPort:    100,
 			},
 			expectErr: false,
 		},
@@ -69,7 +71,7 @@ func TestCheckDefaults(t *testing.T) {
 			in: Config{
 				InterfaceName: test,
 				IP:            "500.2.2.5/24",
-				Port:          100,
+				ListenPort:    100,
 			},
 			expectErr: true,
 		},
@@ -77,7 +79,7 @@ func TestCheckDefaults(t *testing.T) {
 			in: Config{
 				InterfaceName: test,
 				IP:            "::1/24",
-				Port:          100,
+				ListenPort:    100,
 			},
 			expectErr: true,
 		},
@@ -104,7 +106,7 @@ func TestNew(t *testing.T) {
 			in: Config{
 				InterfaceName: "wg0",
 				IP:            "10.0.0.0/24",
-				Port:          1000,
+				ListenPort:    1000,
 			},
 			expected: mockWg{
 				iface:      "wg0",
@@ -120,7 +122,7 @@ func TestNew(t *testing.T) {
 		m := mockWg{
 			iface: c.in.InterfaceName,
 		}
-		_, err := new(c.in, &m)
+		_, err := new(c.in, &m, logrus.New())
 		assert.NoError(t, err, spew.Sdump(c.in))
 		assert.Equal(t, c.expected, m, spew.Sdump(c.in))
 	}
@@ -216,7 +218,7 @@ func TestSyncPeers(t *testing.T) {
 		iface: test,
 		peers: map[string]Peer{},
 	}
-	wg0, _ := new(Config{}, m)
+	wg0, _ := new(Config{}, m, logrus.New())
 	for _, c := range cases {
 		err := wg0.SyncPeers(c.in)
 		assert.NoError(t, err, c.in)

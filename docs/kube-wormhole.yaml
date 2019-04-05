@@ -2,7 +2,6 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  creationTimestamp: null
   name: wgnodes.wormhole.gravitational.io
 spec:
   group: wormhole.gravitational.io
@@ -32,16 +31,12 @@ metadata:
   name: wormhole
   namespace: wormhole
 spec:
-  allowPrivilegeEscalation: false
   allowedCapabilities: ["NET_ADMIN"]
-  hostPID: false
   fsGroup:
     rule: RunAsAny
-  hostNetwork: false
   hostPorts:
   - max: 65535
     min: 1024
-  privileged: false
   runAsUser:
     rule: RunAsAny
   seLinux:
@@ -204,7 +199,7 @@ spec:
         # Run a wormhole container on each node
         # Configures wireguard / CNI on each node
         - name: wormhole
-          image: quay.io/gravitational/wormhole-dev:0.0.1-5-g672d3a7-dirty
+          image: quay.io/gravitational/wormhole-dev:0.0.1-9-g696cc34-dirty
           command:
             - /wormhole
           args:
@@ -219,7 +214,6 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
           securityContext:
-            privileged: false
             readOnlyRootFilesystem: true
             capabilities:
               add: ["NET_ADMIN"]

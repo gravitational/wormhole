@@ -70,7 +70,7 @@ func (c *controller) publishNodeInfo() error {
 			Name: c.config.NodeName,
 		},
 		Status: v1beta1.WgnodeStatus{
-			Port:      c.config.Port,
+			Port:      c.config.ListenPort,
 			PublicKey: c.wireguardInterface.PublicKey(),
 			NodeCIDR:  c.config.NodeCIDR,
 			Endpoint:  c.config.Endpoint,
@@ -87,7 +87,7 @@ func (c *controller) publishNodeInfo() error {
 			return trace.Wrap(err)
 		}
 
-		node.Status.Port = c.config.Port
+		node.Status.Port = c.config.ListenPort
 		node.Status.PublicKey = c.wireguardInterface.PublicKey()
 		node.Status.NodeCIDR = c.config.NodeCIDR
 		node.Status.Endpoint = c.config.Endpoint
@@ -198,7 +198,7 @@ func (c *controller) waitForControllerSync(ctx context.Context) error {
 
 }
 
-func (c *controller) resync() {
+func (c *controller) resync() error {
 	c.Debug("Re-sync triggered")
 
 	err := backoff.Retry(func() error {
@@ -213,11 +213,10 @@ func (c *controller) resync() {
 		Clock:               backoff.SystemClock,
 	})
 	if err != nil {
-		c.WithError(err).Warn("Failed to re-sync with wireguard")
-		if c.errC != nil {
-			c.errC <- trace.Wrap(err)
-		}
+		return trace.Wrap(err)
 	}
+
+	return trace.Wrap(c.updatePeerSecrets(false))
 }
 
 func (c *controller) syncWithWireguard() error {

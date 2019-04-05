@@ -57,12 +57,12 @@ networking:
 
 func TestKubeadmClusterConfigurationErrors(t *testing.T) {
 	cases := []struct {
-		in  *v1.ConfigMap
-		out string
+		in          *v1.ConfigMap
+		description string
 	}{
 		{
-			in:  &v1.ConfigMap{},
-			out: "empty configmap",
+			in:          &v1.ConfigMap{},
+			description: "empty configmap",
 		},
 		{
 			in: &v1.ConfigMap{
@@ -71,7 +71,7 @@ func TestKubeadmClusterConfigurationErrors(t *testing.T) {
 					Namespace: "kube-system",
 				},
 			},
-			out: "empty data",
+			description: "empty data",
 		},
 		{
 			in: &v1.ConfigMap{
@@ -84,7 +84,7 @@ func TestKubeadmClusterConfigurationErrors(t *testing.T) {
 derp: true`,
 				},
 			},
-			out: "missing networking",
+			description: "missing networking",
 		},
 		{
 			in: &v1.ConfigMap{
@@ -100,7 +100,7 @@ networking:
   serviceSubnet: 10.99.0.0/24`,
 				},
 			},
-			out: "invalid cidr",
+			description: "invalid cidr",
 		},
 		{
 			in: &v1.ConfigMap{
@@ -114,14 +114,14 @@ networking:
 	`,
 				},
 			},
-			out: "invalid yaml",
+			description: "invalid yaml",
 		},
 	}
 
 	for _, c := range cases {
 		client := testclient.NewSimpleClientset(c.in)
 		_, err := loadOverlayCidrFromKubeadm(client)
-		assert.Error(t, err, c.out)
+		assert.Error(t, err, c.description)
 	}
 
 }

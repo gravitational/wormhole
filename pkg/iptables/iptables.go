@@ -36,13 +36,17 @@ type Config struct {
 	// PodCIDR is the local pod network range
 	PodCIDR string
 
+	// WireguardIface is the interface name for wireguard
 	WireguardIface string
-	BridgeIface    string
-	SyncInterval   time.Duration
+	// BridgeIface is the bridge interface name for the linux bridge
+	BridgeIface string
+	// SyncInterval is the time duration for resyncing the iptables rules on the host
+	SyncInterval time.Duration
 
 	iptables *iptables.IPTables
 }
 
+// Run will run the iptables control loop in a separate goroutine, that exits when the context is cancelled
 func (c *Config) Run(ctx context.Context) error {
 	ipt, err := iptables.New()
 	if err != nil {
@@ -70,17 +74,18 @@ func (c *Config) Run(ctx context.Context) error {
 
 func (c *Config) sync(ctx context.Context) {
 	ticker := time.NewTicker(c.SyncInterval)
+	defer ticker.Stop()
 	defer c.cleanupRules()
 
 	for {
 		select {
 		case <-ticker.C:
-			ok, err := c.rulesOk()
-			if err != nil {
+			err := c.rulesOk()
+			if err != nil && !trace.IsNotFound(err) {
 				c.Warn("Error checking iptables rules: ", trace.DebugReport(err))
 				continue
 			}
-			if !ok {
+			if trace.IsNotFound(err) {
 				// rules appear to be missing
 				// so we delete then recreate our rules
 				c.cleanupRules()
@@ -97,43 +102,51 @@ func (c *Config) sync(ctx context.Context) {
 	}
 }
 
+const (
+	postrouting = "POSTROUTING"
+	nat         = "nat"
+	filter      = "filter"
+	forward     = "FORWARD"
+	input       = "INPUT"
+)
+
 func (c *Config) generateRules() []rule {
 	rules := make([]rule, 0)
 
 	// Don't nat any traffic with source and destination within the overlay network
 	rules = append(rules,
-		rule{"nat", "POSTROUTING", []string{"-s", c.OverlayCIDR, "-d", c.OverlayCIDR, "-j", "RETURN"},
+		rule{nat, postrouting, []string{"-s", c.OverlayCIDR, "-d", c.OverlayCIDR, "-j", "RETURN"},
 			"wormhole: overlay->overlay"},
 	)
 
 	// Nat all other traffic
 	if c.iptables.HasRandomFully() {
 		rules = append(rules,
-			rule{"nat", "POSTROUTING", []string{"-s", c.PodCIDR, "-j", "MASQUERADE", "--random-fully"},
+			rule{nat, postrouting, []string{"-s", c.PodCIDR, "-j", "MASQUERADE", "--random-fully"},
 				"wormhole: nat overlay->internet"},
 		)
 	} else {
 		rules = append(rules,
-			rule{"nat", "POSTROUTING", []string{"-s", c.PodCIDR, "-j", "MASQUERADE"},
+			rule{nat, postrouting, []string{"-s", c.PodCIDR, "-j", "MASQUERADE"},
 				"wormhole: nat overlay->internet"},
 		)
 	}
 
 	// Don't nat traffic from external hosts to local pods (preserves source IP when using externalTrafficPolicy=local)
 	rules = append(rules,
-		rule{"nat", "POSTROUTING", []string{"-d", c.PodCIDR, "-j", "RETURN"},
+		rule{nat, postrouting, []string{"-d", c.PodCIDR, "-j", "RETURN"},
 			"wormhole: preserve source-ip"},
 	)
 
 	// Masquerade traffic if we're forwarding it to another host
 	if c.iptables.HasRandomFully() {
 		rules = append(rules,
-			rule{"nat", "POSTROUTING", []string{"-d", c.OverlayCIDR, "-j", "MASQUERADE", "--random-fully"},
+			rule{nat, postrouting, []string{"-d", c.OverlayCIDR, "-j", "MASQUERADE", "--random-fully"},
 				"wormhole: nat internet->overlay"},
 		)
 	} else {
 		rules = append(rules,
-			rule{"nat", "POSTROUTING", []string{"-d", c.OverlayCIDR, "-j", "MASQUERADE"},
+			rule{nat, postrouting, []string{"-d", c.OverlayCIDR, "-j", "MASQUERADE"},
 				"wormhole: nat internet->overlay"},
 		)
 	}
@@ -147,40 +160,40 @@ func (c *Config) generateRules() []rule {
 	// whether we need iptable rules per pod (veth entry) to prevent this.
 
 	rules = append(rules,
-		rule{"filter", WormholeAntispoofingChain, []string{"-i", c.BridgeIface, "-s", c.PodCIDR, "-j", "RETURN"},
+		rule{filter, WormholeAntispoofingChain, []string{"-i", c.BridgeIface, "-s", c.PodCIDR, "-j", "RETURN"},
 			"wormhole: antispoofing"},
 		// Wireguard will enforce the source address per peer, so just allow everything in the range
-		rule{"filter", WormholeAntispoofingChain, []string{"-i", c.WireguardIface, "-s", c.OverlayCIDR, "-j", "RETURN"},
+		rule{filter, WormholeAntispoofingChain, []string{"-i", c.WireguardIface, "-s", c.OverlayCIDR, "-j", "RETURN"},
 			"wormhole: antispoofing"},
 		// TODO: why is traffic getting marked to the local interface when testing locally
-		rule{"filter", WormholeAntispoofingChain, []string{"-i", "lo", "-j", "RETURN"},
+		rule{filter, WormholeAntispoofingChain, []string{"-i", "lo", "-j", "RETURN"},
 			"wormhole: antispoofing"},
-		rule{"filter", WormholeAntispoofingChain, []string{"-j", "DROP"},
+		rule{filter, WormholeAntispoofingChain, []string{"-j", "DROP"},
 			"wormhole: drop spoofed traffic"},
 	)
 
 	// Apply anti-spoofing to the Forward / Input chains
 	rules = append(rules,
-		rule{"filter", "FORWARD", []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain},
+		rule{filter, forward, []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain},
 			"wormhole: check antispoofing"},
-		rule{"filter", "INPUT", []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain},
+		rule{filter, input, []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain},
 			"wormhole: check antispoofing"},
 	)
 
 	return rules
 }
 
-func (c *Config) rulesOk() (bool, error) {
+func (c *Config) rulesOk() error {
 	for _, rule := range c.generateRules() {
 		exists, err := c.iptables.Exists(rule.table, rule.chain, rule.getRule()...)
 		if err != nil {
-			return false, trace.Wrap(err)
+			return trace.Wrap(err)
 		}
 		if !exists {
-			return false, nil
+			return trace.NotFound("missing rule")
 		}
 	}
-	return true, nil
+	return nil
 }
 
 func (c *Config) cleanupRules() {

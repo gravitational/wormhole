@@ -49,9 +49,9 @@ func TestPublishNodeInfo(t *testing.T) {
 			FieldLogger: logrus.WithField("logger", "test"),
 			crdClient:   wormholeclientset.NewSimpleClientset(),
 			config: Config{
-				NodeName:  c.nodeName,
-				Namespace: "test",
-				Port:      c.port,
+				NodeName:   c.nodeName,
+				Namespace:  "test",
+				ListenPort: c.port,
 			},
 			wireguardInterface: &mockWireguardInterface{
 				publicKey: c.publicKey,

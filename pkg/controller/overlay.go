@@ -27,8 +27,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// detectOverlayCidr tries and finds the Overlay CIDR network from the kubernetes API
-func (d *controller) detectOverlayCidr() error {
+// detectOverlayCIDR tries and finds the Overlay CIDR network from the kubernetes API
+func (d *controller) detectOverlayCIDR() error {
 	if d.config.OverlayCIDR != "" {
 		return nil
 	}
@@ -37,12 +37,11 @@ func (d *controller) detectOverlayCidr() error {
 
 	// Assume we're running inside planet, and continue to other checks if we're not
 	cidr, err := d.loadOverlayCidrFromPlanet()
-	if err != nil {
-		d.Info("Unable to load overlay network from planet: ", trace.DebugReport(err))
-	} else {
+	if err == nil {
 		d.config.OverlayCIDR = cidr
 		return nil
 	}
+	d.Info("Unable to load overlay network from planet: ", trace.DebugReport(err))
 
 	// try and load config from kubeadm
 	cidr, err = loadOverlayCidrFromKubeadm(d.client)
@@ -65,12 +64,13 @@ func loadOverlayCidrFromKubeadm(client kubernetes.Interface) (string, error) {
 		return "", trace.Wrap(err)
 	}
 
-	if _, ok := config.Data["ClusterConfiguration"]; !ok {
+	clusterConfig, ok := config.Data["ClusterConfiguration"]
+	if !ok {
 		return "", trace.BadParameter("kubeadm configmap is missing ClusterConfiguration")
 	}
 
 	var parsedConfig kubeadmClusterConfiguration
-	err = yaml.Unmarshal([]byte(config.Data["ClusterConfiguration"]), &parsedConfig)
+	err = yaml.Unmarshal([]byte(clusterConfig), &parsedConfig)
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
@@ -83,8 +83,7 @@ func loadOverlayCidrFromKubeadm(client kubernetes.Interface) (string, error) {
 		return cidr, nil
 	}
 
-	return "", trace.BadParameter("Unable to locate networking.podSubnet in kubeadm config: %v",
-		config.Data["ClusterConfiguration"])
+	return "", trace.BadParameter("Unable to locate networking.podSubnet in kubeadm config: %v", clusterConfig)
 }
 
 // loadOverlayCidrFromPlanet attempts to load planet subnet information from the planet /etc/container-environment file

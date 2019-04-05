@@ -178,7 +178,7 @@ func (Build) BuildContainer() error {
 
 type Test mg.Namespace
 
-// All runs all defined test
+// All runs all defined tests
 func (Test) All() error {
 	mg.Deps(Test.Unit, Test.Lint)
 	return nil

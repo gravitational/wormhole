@@ -105,11 +105,11 @@ func (w *wg) pubKey(key string) (string, error) {
 		return "", trace.Wrap(err)
 	}
 
-	return strings.TrimSuffix(stdout.String(), "\n"), nil
+	return strings.TrimSpace(stdout.String()), nil
 }
 
 func (w *wg) setPrivateKey(key string) error {
-	// it looks like wireguard only accepts key's by file
+	// it looks like wireguard only accepts keys by file
 	// so we'll need to write the key to a file, load into wireguard
 	// then delete it
 	tmpFile, err := ioutil.TempFile(os.TempDir(), "")
@@ -253,7 +253,7 @@ func (w *wg) addPeer(peer Peer) error {
 	}
 	w.sharedSecrets[peer.PublicKey] = peer.SharedKey
 
-	// it looks like wireguard only accepts key's by file
+	// it looks like wireguard only accepts keys by file
 	// so we'll need to write the key to a file, load into wireguard
 	// then delete it
 	tmpFile, err := ioutil.TempFile(os.TempDir(), "")
@@ -261,6 +261,11 @@ func (w *wg) addPeer(peer Peer) error {
 		return trace.Wrap(err)
 	}
 	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.Write([]byte(peer.SharedKey))
+	if err != nil {
+		return trace.Wrap(err)
+	}
 
 	return trace.ConvertSystemError(sh.Run(
 		"wg",
@@ -298,7 +303,7 @@ func (w *wg) getPeers() (map[string]PeerStatus, error) {
 	for _, line := range strings.Split(o, "\n")[1:] {
 		c := strings.Split(line, "\t")
 		if len(c) != 8 {
-			return nil, trace.BadParameter("Unexpected number of columns in wg show: %v", c)
+			return nil, trace.BadParameter("Expected 8  columns in wg show but got %v: %v", len(c), c)
 		}
 
 		handshakeTime := time.Time{}

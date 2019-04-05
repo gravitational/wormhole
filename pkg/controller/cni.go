@@ -38,9 +38,9 @@ func (d *controller) configureCNI() error {
 				// Investigate what MTU setting to use. There are a few things to consider:
 				//   - 65535 is the maximum mtu that can be set on a bridge
 				//   - This depends significantly, on how the linux kernel represents packets as they pass between
-				//     network namespaces and through the linux bridge. If they'rerepresented as ethernet packets,
+				//     network namespaces and through the linux bridge. If they're represented as ethernet packets,
 				//     a large mtu should allow pod-to-pod within a host to be more efficient
-				//   - Wireguard implements it's own segmentation, and indicates to the linux kernel that it supports
+				//   - Wireguard implements its own segmentation, and indicates to the linux kernel that it supports
 				//     generic segmentation offload (https://www.wireguard.com/papers/wireguard.pdf section 7.1). If
 				//     the bridge MTU plays into this, again, having a large mtu should be more efficient for pod-to-pod
 				//     traffic between hosts.
