@@ -63,6 +63,9 @@ type Config struct {
 	// Endpoint is the networking address that is available for routing between all wireguard nodes
 	// In general this should be the same as the AdvertiseIP Address of the node
 	Endpoint string
+
+	// BridgeMTU is the MTU value to assign to the internal linux bridge
+	BridgeMTU int
 }
 
 type Controller interface {
@@ -108,6 +111,14 @@ func New(config Config, logger logrus.FieldLogger) (Controller, error) {
 
 func (d *controller) init() error {
 	d.Info("Initializing Wormhole...")
+
+	if d.config.BridgeMTU < 68 || d.config.BridgeMTU > 65535 {
+		return trace.BadParameter("Bridge MTU value out of range. %v must be within 68-65535", d.config.BridgeMTU)
+	}
+	if d.config.BridgeMTU < 1280 {
+		d.WithField("mtu", d.config.BridgeMTU).
+			Warn("Bridge MTU is small, you may experience performance issues. 1280 or more is recommended")
+	}
 
 	var err error
 	var config *rest.Config
@@ -185,6 +196,7 @@ func (d *controller) Run(ctx context.Context) error {
 	d.Info("  Wireguard Interface Address: ", d.ipamInfo.wireguardAddr)
 	d.Info("  Bridge Interface Name:       ", d.config.BridgeIface)
 	d.Info("  Bridge Interface Address:    ", d.ipamInfo.bridgeAddr)
+	d.Info("  Bridge MTU:                  ", d.config.BridgeMTU)
 	d.Info("  Pod Address Start:           ", d.ipamInfo.podAddrStart)
 	d.Info("  Pod Address End:             ", d.ipamInfo.podAddrEnd)
 	d.Info("  Kubeconfig Path:             ", d.config.KubeconfigPath)

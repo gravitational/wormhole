@@ -104,6 +104,13 @@ func init() {
 		debug,
 		"Enable debug logging",
 	)
+	controllerCmd.Flags().IntVarP(
+		&bridgeMTU,
+		"bridge-mtu",
+		"",
+		bridgeMTU,
+		"The MTU value to assign to the internal linux bridge",
+	)
 }
 
 var (
@@ -116,6 +123,24 @@ var (
 	wireguardIface = "wormhole-wg0"
 	bridgeIface    = "wormhole-br0"
 	namespace      = "wormhole"
+
+	// TODO(knisbet)
+	// Investigate what MTU setting to use. There are a few things to consider:
+	//   - 65535 is the maximum mtu that can be set on a bridge
+	//   - This depends significantly, on how the linux kernel represents packets as they pass between
+	//     network namespaces and through the linux bridge. If they're represented as ethernet packets,
+	//     a large mtu should allow pod-to-pod within a host to be more efficient
+	//   - Wireguard implements its own segmentation, and indicates to the linux kernel that it supports
+	//     generic segmentation offload (https://www.wireguard.com/papers/wireguard.pdf section 7.1). If
+	//     the bridge MTU plays into this, again, having a large mtu should be more efficient for pod-to-pod
+	//     traffic between hosts.
+	//   - If the network driver supports/has segmentation offload enabled, having large internal frames
+	//     should also be more efficient. So pod -> internet traffic is segmented by the nic if enabled.
+	//   - Also need to check into, whether we're getting a correct MSS, all of this is wasted if we're
+	//     using a standard MSS in the TCP handshake
+	//   - Also need to check whether we're advertising too large of a MSS on our TCP connections to internet
+	//     peers, which may cause traffic towards a pod to have PMTU/black hole problems
+	bridgeMTU = 65535
 )
 
 func runController(cmd *cobra.Command, args []string) error {
@@ -137,6 +162,7 @@ func runController(cmd *cobra.Command, args []string) error {
 		ListenPort:     port,
 		WireguardIface: wireguardIface,
 		BridgeIface:    bridgeIface,
+		BridgeMTU:      bridgeMTU,
 		KubeconfigPath: kubeconfigPath,
 		Endpoint:       endpoint,
 	}, logger)
