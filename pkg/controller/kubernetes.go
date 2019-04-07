@@ -207,7 +207,7 @@ func (c *controller) resync() error {
 	}, &backoff.ExponentialBackOff{
 		InitialInterval:     500 * time.Millisecond,
 		MaxInterval:         5 * time.Second,
-		RandomizationFactor: 0.1,
+		RandomizationFactor: 0.5,
 		Multiplier:          2,
 		MaxElapsedTime:      10 * time.Second,
 		Clock:               backoff.SystemClock,
@@ -216,7 +216,19 @@ func (c *controller) resync() error {
 		return trace.Wrap(err)
 	}
 
-	return trace.Wrap(c.updatePeerSecrets(false))
+	err = backoff.Retry(func() error {
+		err := c.updatePeerSecrets(false)
+		return trace.Wrap(err)
+	}, &backoff.ExponentialBackOff{
+		InitialInterval:     500 * time.Millisecond,
+		MaxInterval:         5 * time.Second,
+		RandomizationFactor: 0.5,
+		Multiplier:          2,
+		MaxElapsedTime:      10 * time.Second,
+		Clock:               backoff.SystemClock,
+	})
+	return trace.Wrap(err)
+
 }
 
 func (c *controller) syncWithWireguard() error {
