@@ -15,34 +15,35 @@ package controller
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 
 	"github.com/gravitational/trace"
 )
 
-func (d *Controller) configureCNI() error {
+func (d *controller) configureCNI() error {
 	conf := map[string]interface{}{
 		"cniVersion": "0.3.1",
 		"name":       "wormhole",
 		"plugins": []map[string]interface{}{
 			{
 				"type":             "bridge",
-				"bridge":           d.BridgeIface,
+				"bridge":           d.config.BridgeIface,
 				"isGateway":        true,
 				"isDefaultGateway": true,
 				"forceAddress":     false,
 				"ipMasq":           false,
 				"hairpinMode":      true,
-				"mtu":              65535, // TODO(knisbet) is setting max MTU on the bridge wise?
+				"mtu":              fmt.Sprint(d.config.BridgeMTU),
 				"ipam": map[string]interface{}{
 					"type": "host-local",
 					"ranges": [][]map[string]string{
 						{
 							{
-								"subnet":     d.nodePodCIDR,
-								"rangeStart": d.podRangeStart,
-								"rangeEnd":   d.podRangeEnd,
+								"subnet":     d.config.NodeCIDR,
+								"rangeStart": d.ipamInfo.podAddrStart,
+								"rangeEnd":   d.ipamInfo.podAddrEnd,
 							},
 						},
 					},

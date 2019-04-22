@@ -15,10 +15,11 @@ package controller
 
 import (
 	"context"
-	"os"
+	"net"
+	"time"
 
-	"github.com/davecgh/go-spew/spew"
-
+	wormholeclientset "github.com/gravitational/wormhole/pkg/client/clientset/versioned"
+	wormholelister "github.com/gravitational/wormhole/pkg/client/listers/wormhole.gravitational.io/v1beta1"
 	"github.com/gravitational/wormhole/pkg/iptables"
 	"github.com/gravitational/wormhole/pkg/wireguard"
 
@@ -31,217 +32,251 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type Controller struct {
-	logrus.FieldLogger
-
+type Config struct {
 	// NodeName is the name of the k8s node this instance is running on
 	NodeName string
 
-	// OverlayCIDR is the IP network CIDR for the entire overlay network
+	// Namespace is the kubernetes namespace to use for syncing wormhole objects
+	Namespace string
+
+	// OverlayCIDR is the IP network in CIDR format for the entire overlay network
 	OverlayCIDR string
 
-	// Port is the external port wireguard should listen on for tunnels
-	Port int
+	// NodeCIDR is the IP network in CIDR format assigned to this node
+	NodeCIDR string
 
-	// WireguardIface is the name of the wireguard interface to create
+	// ListenPort is the external port wireguard should listen on between hosts
+	ListenPort int
+
+	// WireguardIface is the name of the wireguard interface for encrypted node to node traffic
 	WireguardIface string
 
-	// BridgeIface is the name of the bridge to create
+	// BridgeIface is the name of the linux bridge to create internal to the host
 	BridgeIface string
 
-	// nodeClient is a kubernetes client for accessing the nodes own object
-	nodeClient *kubernetes.Clientset
-	// wireguardClient is a kubernetes client for accessing wireguard related config
-	wormholeClient *kubernetes.Clientset
+	// Kubeconfig path is the path to a kubeconfig file to access the kubernetes API
+	KubeconfigPath string
 
-	// publicKey is the public key of this node
-	publicKey string
-	// sharedKey is the shared key of this cluster
-	sharedKey string
+	// SyncInterval is how frequently to re-sync state between each component
+	SyncInterval time.Duration
 
-	// nodePodCIDR is the cidr range for pods on this host from IPAM
-	nodePodCIDR string
-	// podGateway is the gateway address to use for pods
-	podGateway string
-	// wormholeGateway is the gateway for overlay traffic
-	wormholeGateway string
-	// podRangeStart is the start of the ip range to assign to pods
-	podRangeStart string
-	// podRangeEnd is the end of the ip range to assign to pods
-	podRangeEnd string
+	// Endpoint is the networking address that is available for routing between all wireguard nodes
+	// In general this should be the same as the AdvertiseIP Address of the node
+	Endpoint string
 
-	nodeController cache.Controller
-	nodeList       listers.NodeLister
+	// BridgeMTU is the MTU value to assign to the internal linux bridge
+	BridgeMTU int
 }
 
-func (d *Controller) init(nodeKubeconfig, wormKubeconfig string) error {
-	var err error
-	d.nodeClient, err = getClientsetFromKubeconfig(nodeKubeconfig)
-	if err != nil {
-		return trace.Wrap(err)
+type Controller interface {
+	Run(context.Context) error
+}
+
+type controller struct {
+	logrus.FieldLogger
+
+	config Config
+
+	// client is a kubernetes client for accessing wormhole data
+	client    kubernetes.Interface
+	crdClient wormholeclientset.Interface
+
+	// ipamInfo is IPAM info about the node
+	ipamInfo *ipamInfo
+
+	//overlayCidr is the IP network for the entire overlay network
+	overlayCIDR net.IPNet
+
+	// wireguardInterface is a controller for managing / updating our wireguard interface
+	wireguardInterface wireguard.Interface
+
+	nodeController cache.Controller
+	nodeLister     wormholelister.WgnodeLister
+
+	secretController cache.Controller
+	secretLister     listers.SecretLister
+
+	resyncC chan interface{}
+}
+
+func New(config Config, logger logrus.FieldLogger) (Controller, error) {
+	controller := &controller{
+		FieldLogger: logger,
+		config:      config,
+		resyncC:     make(chan interface{}, 1),
 	}
 
-	if wormKubeconfig != "" {
-		d.wormholeClient, err = getClientsetFromKubeconfig(wormKubeconfig)
+	return controller, trace.Wrap(controller.init())
+}
+
+func (d *controller) init() error {
+	d.Info("Initializing Wormhole...")
+
+	if d.config.BridgeMTU < 68 || d.config.BridgeMTU > 65535 {
+		return trace.BadParameter("Bridge MTU value out of range. %v must be within 68-65535", d.config.BridgeMTU)
+	}
+	if d.config.BridgeMTU < 1280 {
+		d.WithField("mtu", d.config.BridgeMTU).
+			Warn("Bridge MTU is small, you may experience performance issues. 1280 or more is recommended")
+	}
+
+	var err error
+	var config *rest.Config
+	if d.config.KubeconfigPath != "" {
+		config, err = clientcmd.BuildConfigFromFlags("", d.config.KubeconfigPath)
 		if err != nil {
 			return trace.Wrap(err)
 		}
 	} else {
-		clusterConfig, err := rest.InClusterConfig()
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		d.wormholeClient, err = kubernetes.NewForConfig(clusterConfig)
+		config, err = rest.InClusterConfig()
 		if err != nil {
 			return trace.Wrap(err)
 		}
 	}
 
-	return nil
-}
-
-func runningInPod() bool {
-	return os.Getenv("POD_NAME") != ""
-}
-
-func getClientsetFromKubeconfig(path string) (*kubernetes.Clientset, error) {
-	config, err := clientcmd.BuildConfigFromFlags("", path)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	return clientset, nil
-}
-
-func (d *Controller) Run(ctx context.Context, nodeKubeconfig, wormKubeconfig string) error {
-	d.Info("Starting wormhole Controller with config: ", spew.Sdump(d))
-
-	err := d.init(nodeKubeconfig, wormKubeconfig)
+	d.client, err = kubernetes.NewForConfig(config)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	err = d.startup(ctx)
+	d.crdClient, err = wormholeclientset.NewForConfig(config)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	iptablesSync := iptables.Config{
-		FieldLogger:    d.FieldLogger.WithField("module", "iptables"),
-		OverlayCIDR:    d.OverlayCIDR,
-		PodCIDR:        d.nodePodCIDR,
-		WireguardIface: d.WireguardIface,
-		BridgeIface:    d.BridgeIface,
-	}
-	err = iptablesSync.Run(ctx)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	return nil
-}
-
-func (d *Controller) startup(ctx context.Context) error {
-	d.Info("Starting Wormhole...")
-	var err error
-	if d.NodeName == "" {
+	if d.config.NodeName == "" {
+		d.Info("Attempting to detect Node Name.")
 		err = d.detectNodeName()
 		if err != nil {
 			return trace.Wrap(err)
 		}
 	}
 
-	err = d.loadOverlayCidr()
+	if d.config.OverlayCIDR == "" {
+		d.Info("Attempting to detect overlay network address range.")
+		err = d.detectOverlayCIDR()
+		if err != nil {
+			return trace.Wrap(err)
+		}
+	}
+	_, overlayNetwork, err := net.ParseCIDR(d.config.OverlayCIDR)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	d.Info("OverlayCidr: ", d.OverlayCIDR)
+	d.overlayCIDR = *overlayNetwork
 
-	psk, err := d.getOrSetPSK()
-	if err != nil {
-		return trace.Wrap(err)
+	if d.config.NodeCIDR == "" {
+		d.Info("Attempting to detect node network address range")
+		err = d.detectIPAM()
+		if err != nil {
+			return trace.Wrap(err)
+		}
 	}
-	d.sharedKey = psk
-	d.Info("PSK: <redacted>")
-
-	pubKey, privKey, err := d.generateKeypair()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	d.publicKey = pubKey
-	d.Info("PubKey: ", pubKey)
-	d.Info("PrivKey: <redacted>")
-
-	// send our new public key to the cluster
-	err = d.publishPublicKey()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	// retrieve this instances cidr from the k8s IPAM
-	err = d.getPodCIDR()
+	d.Info("Calculating IPAM Offsets.")
+	err = d.calculateIPAMOffsets()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	// configure wireguard
-	// TODO(knisbet) right now, I'm just ignoring errors in the setup
-	// but this needs to eventually be handled properly
-	_ = wireguard.CreateInterface(d.WireguardIface)
-	_ = wireguard.SetIP(d.WireguardIface, d.wormholeGateway)
-	_ = wireguard.SetPrivateKey(d.WireguardIface, privKey)
-	_ = wireguard.SetListenPort(d.WireguardIface, d.Port)
-	_ = wireguard.SetUp(d.WireguardIface)
-
-	if d.OverlayCIDR == "" {
-		// TODO (implement reading overlay cidr from network)
-		return trace.NotImplemented("OverlayCIDR detection not implemented")
+	if d.config.SyncInterval == 0 {
+		d.config.SyncInterval = 60 * time.Second
 	}
-	_ = wireguard.SetRoute(d.WireguardIface, d.OverlayCIDR)
 
-	// configure CNI on the host
+	d.Info("Initialization complete.")
+	return nil
+}
+
+func (d *controller) Run(ctx context.Context) error {
+	d.Info("Running wormhole controller.")
+	d.Info("  Node Name:                   ", d.config.NodeName)
+	d.Info("  Port:                        ", d.config.ListenPort)
+	d.Info("  Overlay Network:             ", d.config.OverlayCIDR)
+	d.Info("  Node Network:                ", d.config.NodeCIDR)
+	d.Info("  Wireguard Interface Name:    ", d.config.WireguardIface)
+	d.Info("  Wireguard Interface Address: ", d.ipamInfo.wireguardAddr)
+	d.Info("  Bridge Interface Name:       ", d.config.BridgeIface)
+	d.Info("  Bridge Interface Address:    ", d.ipamInfo.bridgeAddr)
+	d.Info("  Bridge MTU:                  ", d.config.BridgeMTU)
+	d.Info("  Pod Address Start:           ", d.ipamInfo.podAddrStart)
+	d.Info("  Pod Address End:             ", d.ipamInfo.podAddrEnd)
+	d.Info("  Kubeconfig Path:             ", d.config.KubeconfigPath)
+	d.Info("  Resync Period:               ", d.config.SyncInterval)
+
+	iptablesSync := iptables.Config{
+		FieldLogger:    d.FieldLogger.WithField("module", "iptables"),
+		OverlayCIDR:    d.config.OverlayCIDR,
+		PodCIDR:        d.config.NodeCIDR,
+		WireguardIface: d.config.WireguardIface,
+		BridgeIface:    d.config.BridgeIface,
+		SyncInterval:   d.config.SyncInterval,
+	}
+	err := iptablesSync.Run(ctx)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	d.wireguardInterface, err = wireguard.New(wireguard.Config{
+		InterfaceName: d.config.WireguardIface,
+		IP:            d.ipamInfo.wireguardAddr,
+		ListenPort:    d.config.ListenPort,
+		OverlayNetworks: []net.IPNet{
+			d.overlayCIDR,
+		},
+	}, d.FieldLogger)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	err = d.configureCNI()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	kubernetesSync := kubernetesSync{
-		Controller: d,
-	}
-	kubernetesSync.start(ctx)
-
-	wireguardSync := wireguardSync{
-		Controller: d,
-	}
-	err = wireguardSync.start(ctx)
+	err = d.publishNodeInfo()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	return nil
+	err = d.initKubeObjects()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	d.startNodeWatcher(ctx)
+	d.startSecretWatcher(ctx)
+
+	err = d.waitForControllerSync(ctx)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	err = d.updatePeerSecrets(true)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	d.Info("Wormhole is running")
+	return trace.Wrap(d.run(ctx))
 }
 
-func (d *Controller) detectNodeName() error {
-	d.Debug("Attempting to detect nodename.")
-	defer func() { d.Info("Detected hostname: ", d.NodeName) }()
-	// if we're running inside a pod
-	// find the node the pod is assigned to
-	podName := os.Getenv("POD_NAME")
-	podNamespace := os.Getenv("POD_NAMESPACE")
-	if podName != "" && podNamespace != "" {
-		return trace.Wrap(d.updateNodeNameFromPod(podName, podNamespace))
-	}
+func (d *controller) run(ctx context.Context) error {
+	syncTimer := time.NewTicker(d.config.SyncInterval)
+	defer syncTimer.Stop()
 
-	nodeName, err := os.Hostname()
-	if err != nil {
-		return trace.Wrap(err)
+	for {
+		select {
+		case <-ctx.Done():
+			return trace.Wrap(ctx.Err())
+		case <-d.resyncC:
+			err := d.resync()
+			if err != nil {
+				return trace.Wrap(err)
+			}
+		case <-syncTimer.C:
+			err := d.resync()
+			if err != nil {
+				return trace.Wrap(err)
+			}
+		}
 	}
-	// TODO(knisbet) we should probably validate here, a node object exists that matches our node name
-	d.NodeName = nodeName
-	return nil
 }

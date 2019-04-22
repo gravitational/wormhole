@@ -24,8 +24,34 @@
 #   go-tests = true
 #   unused-packages = true
 
-required = ["github.com/magefile/mage/mage"]
+required = [
+  "github.com/magefile/mage/mage",
+  "k8s.io/code-generator/cmd/client-gen"
+]
 
 [prune]
   go-tests = true
-  unused-packages = true
+
+[[constraint]]
+  name = "github.com/vishvananda/netlink"
+  version = "1.0.0"
+
+[[constraint]]
+  name = "k8s.io/code-generator"
+  version = "kubernetes-1.13.4"
+
+[[constraint]]
+  name = "k8s.io/api"
+  version = "kubernetes-1.13.4"
+
+[[constraint]]
+  name = "k8s.io/apimachinery"
+  version = "kubernetes-1.13.4"
+
+[[constraint]]
+  name = "k8s.io/client-go"
+  version = "kubernetes-1.13.4"
+
+[[constraint]]
+  name = "sigs.k8s.io/controller-runtime"
+  branch = "master"
