@@ -15,7 +15,6 @@ package controller
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"path/filepath"
 
@@ -35,7 +34,7 @@ func (d *controller) configureCNI() error {
 				"forceAddress":     false,
 				"ipMasq":           false,
 				"hairpinMode":      true,
-				"mtu":              fmt.Sprint(d.config.BridgeMTU),
+				"mtu":              d.config.BridgeMTU,
 				"ipam": map[string]interface{}{
 					"type": "host-local",
 					"ranges": [][]map[string]string{
