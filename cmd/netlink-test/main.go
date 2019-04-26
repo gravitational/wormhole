@@ -36,4 +36,11 @@ func main() {
 	link, err = netlink.LinkByName("wormhole-br0")
 	fmt.Println("  err: ", spew.Sdump(err))
 	fmt.Println("  link: ", spew.Sdump(link))
+
+	links, err := netlink.LinkList()
+	fmt.Println("LinkList error: ", err)
+	for _, link := range links {
+		fmt.Printf("%v: %v\n", link.Attrs().Name, link.Attrs().MTU)
+		fmt.Println(spew.Sdump(link.Attrs()))
+	}
 }
