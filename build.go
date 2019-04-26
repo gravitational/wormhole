@@ -48,6 +48,9 @@ var (
 	wireguardBuildImage = "ubuntu:18.10"
 	// rigImage is the imageref to get the rigging tool from
 	rigImage = "quay.io/gravitational/rig:5.3.1"
+
+	// buildVersion allows override of the version string from env variable
+	buildVersion = env("WORM_BUILD_VERSION", "")
 )
 
 // env, loads a variable from the environment, or uses the provided default
@@ -273,6 +276,9 @@ func hash() string {
 
 // version returns the git tag for the current branch or "" if none.
 func version() string {
+	if buildVersion != "" {
+		return buildVersion
+	}
 	//shortTag, _ := sh.Output("git", "describe", "--tags", "--abbrev=0")
 	longTag, _ := sh.Output("git", "describe", "--tags", "--dirty")
 

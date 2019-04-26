@@ -15,18 +15,26 @@ package iptables
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/gravitational/trace"
 )
 
-const (
-	WormholeAntispoofingChain = "WORMHOLE-ANTISPOOFING"
+var (
+	WormholeAntispoofingChain = chain{filter, "WORMHOLE-ANTISPOOFING"}
+	WormholeMSSChain          = chain{mangle, "WORMHOLE-MSS"}
 )
+
+type chain struct {
+	table string
+	name  string
+}
 
 type Config struct {
 	logrus.FieldLogger
@@ -106,11 +114,12 @@ const (
 	postrouting = "POSTROUTING"
 	nat         = "nat"
 	filter      = "filter"
+	mangle      = "mangle"
 	forward     = "FORWARD"
 	input       = "INPUT"
 )
 
-func (c *Config) generateRules() []rule {
+func (c *Config) generateRules(links []netlink.Link) []rule {
 	rules := make([]rule, 0)
 
 	// Don't nat any traffic with source and destination within the overlay network
@@ -160,31 +169,62 @@ func (c *Config) generateRules() []rule {
 	// whether we need iptable rules per pod (veth entry) to prevent this.
 
 	rules = append(rules,
-		rule{filter, WormholeAntispoofingChain, []string{"-i", c.BridgeIface, "-s", c.PodCIDR, "-j", "RETURN"},
+		rule{filter, WormholeAntispoofingChain.name, []string{"-i", c.BridgeIface, "-s", c.PodCIDR, "-j", "RETURN"},
 			"wormhole: antispoofing"},
 		// Wireguard will enforce the source address per peer, so just allow everything in the range
-		rule{filter, WormholeAntispoofingChain, []string{"-i", c.WireguardIface, "-s", c.OverlayCIDR, "-j", "RETURN"},
+		rule{filter, WormholeAntispoofingChain.name, []string{"-i", c.WireguardIface, "-s", c.OverlayCIDR, "-j", "RETURN"},
 			"wormhole: antispoofing"},
 		// TODO: why is traffic getting marked to the local interface when testing locally
-		rule{filter, WormholeAntispoofingChain, []string{"-i", "lo", "-j", "RETURN"},
+		rule{filter, WormholeAntispoofingChain.name, []string{"-i", "lo", "-j", "RETURN"},
 			"wormhole: antispoofing"},
-		rule{filter, WormholeAntispoofingChain, []string{"-j", "DROP"},
+		rule{filter, WormholeAntispoofingChain.name, []string{"-j", "DROP"},
 			"wormhole: drop spoofed traffic"},
 	)
 
 	// Apply anti-spoofing to the Forward / Input chains
 	rules = append(rules,
-		rule{filter, forward, []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain},
+		rule{filter, forward, []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain.name},
 			"wormhole: check antispoofing"},
-		rule{filter, input, []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain},
+		rule{filter, input, []string{"-s", c.OverlayCIDR, "-j", WormholeAntispoofingChain.name},
 			"wormhole: check antispoofing"},
+	)
+
+	//
+	// MSS Clamping
+	// Set rules so that traffic that originates from the overlay network towards the internet
+	// uses the MSS value of the host interface.
+
+	for _, link := range links {
+		if strings.HasPrefix(link.Attrs().Name, "wormhole") ||
+			strings.HasPrefix(link.Attrs().Name, "veth") ||
+			strings.HasPrefix(link.Attrs().Name, "lo") {
+			// don't create clamping rules for wormhole / veth / local interfaces
+			continue
+		}
+		rules = append(rules,
+			rule{mangle, WormholeMSSChain.name, []string{"-o", link.Attrs().Name,
+				"-p", "tcp", "--tcp-flags", "SYN,RST", "SYN",
+				"-j", "TCPMSS", "--set-mss", fmt.Sprint(link.Attrs().MTU - 40)}, // 40 bytes below MTU for TCPv4
+				"wormhole: mss clamping"},
+		)
+	}
+
+	// link mangle forward table to mss chain
+	rules = append(rules,
+		rule{mangle, forward, []string{"-j", WormholeMSSChain.name},
+			"wormhole: check mss clamping"},
 	)
 
 	return rules
 }
 
 func (c *Config) rulesOk() error {
-	for _, rule := range c.generateRules() {
+	links, err := netlink.LinkList()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	for _, rule := range c.generateRules(links) {
 		exists, err := c.iptables.Exists(rule.table, rule.chain, rule.getRule()...)
 		if err != nil {
 			return trace.Wrap(err)
@@ -197,7 +237,7 @@ func (c *Config) rulesOk() error {
 }
 
 func (c *Config) cleanupRules() {
-	for _, rule := range c.generateRules() {
+	for _, rule := range c.generateRules([]netlink.Link{}) {
 		c.Info("Deleting iptables rule: table: ", rule.table, " chain: ", rule.chain, " spec: ",
 			strings.Join(rule.getRule(), " "))
 
@@ -208,23 +248,47 @@ func (c *Config) cleanupRules() {
 		}
 	}
 
-	err := c.iptables.DeleteChain("filter", WormholeAntispoofingChain)
-	if err != nil {
-		c.Info("Delete chain ", WormholeAntispoofingChain, " failed: ", err)
+	for _, chain := range []chain{WormholeAntispoofingChain, WormholeMSSChain} {
+		err := c.iptables.ClearChain(chain.table, chain.name)
+		if err != nil {
+			c.Info("Clear chain ", chain, " failed: ", err)
+		}
+
+		err = c.iptables.DeleteChain(chain.table, chain.name)
+		if err != nil {
+			c.Info("Delete chain ", chain, " failed: ", err)
+		}
 	}
 }
 
 func (c *Config) createRules() error {
-	err := c.iptables.ClearChain("filter", WormholeAntispoofingChain)
+
+	for _, chain := range []chain{WormholeAntispoofingChain, WormholeMSSChain} {
+		err := c.iptables.ClearChain(chain.table, chain.name)
+		if err != nil {
+			c.Info("Clear chain ", chain, " failed: ", err)
+		}
+
+		err = c.iptables.DeleteChain(chain.table, chain.name)
+		if err != nil {
+			c.Info("Delete chain ", chain, " failed: ", err)
+		}
+
+		err = c.iptables.NewChain(chain.table, chain.name)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+	}
+
+	links, err := netlink.LinkList()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	for _, rule := range c.generateRules() {
+	for _, rule := range c.generateRules(links) {
 		c.Info("Adding iptables rule: table: ", rule.table, " chain: ", rule.chain, " spec: ",
 			strings.Join(rule.getRule(), " "))
 
-		// ignore and log errors in delete, which are likely caused by the rule not existing
 		err = c.iptables.AppendUnique(rule.table, rule.chain, rule.getRule()...)
 		if err != nil {
 			return trace.Wrap(err)
