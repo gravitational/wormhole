@@ -244,6 +244,7 @@ func (d *controller) Run(ctx context.Context) error {
 
 	d.startNodeWatcher(ctx)
 	d.startSecretWatcher(ctx)
+	d.startNodeDeletionWatcher(ctx)
 
 	err = d.waitForControllerSync(ctx)
 	if err != nil {
