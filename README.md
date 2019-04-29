@@ -34,6 +34,9 @@ kubectl apply -f https://raw.githubusercontent.com/gravitational/wormhole/master
 Note: Replace the --overlay-cidr flag in the daemonset with the overlay-cidr that matches you're network
 Note: Kubernetes IPAM must be enabled (--cluster-cidr / --allocate-node-cidrs on kube-controller-manager)
 
+## Troubleshooting
+See [troubleshooting.md](docs/troubleshooting.md)
+
 ## Build and Publish to a docker registry
 
 ```
