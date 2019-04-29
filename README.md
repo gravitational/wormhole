@@ -60,8 +60,8 @@ The best way to contribute is to create issues or pull requests right here on Gi
 |Project Links| Description
 |---|----
 | [Blog](http://blog.gravitational.com) | Our blog, where we publish gravitational news |
-| [Security Updates](https://groups.google.com/forum/#!forum/gravity-community-security) | Gravity Community Security Updates |
-| [Community Forum](https://community.gravitational.com) | Gravitational Community Forum|
+| [Security and Release Updates](https://community.gravitational.com/c/wormhole-news) | Subscribe to our discourse for security and news updates |
+| [Community Forum](https://community.gravitational.com/c/wormhole) | Gravitational Community Forum|
 
 ## Who Built Wormhole?
 Wormhole was created by [Gravitational Inc.](https://gravitational.com) We have built wormhole by leveraging our experience automating and supporting hundreds of kubernetes clusters with [Gravity](https://gravitational.com/gravity/), our Kubernetes distribution optimized for deploying and remotely controlling complex applications into multiple environments at the same time:
