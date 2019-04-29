@@ -1,0 +1,243 @@
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: wgnodes.wormhole.gravitational.io
+spec:
+  group: wormhole.gravitational.io
+  names:
+    kind: Wgnode
+    plural: wgnodes
+  scope: Namespaced
+  version: v1beta1
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wormhole
+---
+apiVersion: extensions/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: docker/default
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: docker/default
+  name: wormhole
+  namespace: wormhole
+spec:
+  allowedCapabilities: ["NET_ADMIN"]
+  fsGroup:
+    rule: RunAsAny
+  hostPorts:
+  - max: 65535
+    min: 1024
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  volumes:
+  - '*'
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: wormhole
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+      - wormhole.gravitational.io
+    resources:
+      - "*"
+    verbs:
+      - "*"
+  - apiGroups:
+      - policy
+    resources:
+      - podsecuritypolicies
+    verbs:
+      - use
+    resourceNames:
+      - wormhole
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: wormhole
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: wormhole
+subjects:
+- kind: ServiceAccount
+  name: wormhole
+  namespace: wormhole
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: wormhole
+  name: wormhole
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - watch
+      - list
+      - create
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: kube-system
+  name: wormhole
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+    resourceNames:
+      - kubeadm-config
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: wormhole
+  name: wormhole
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: wormhole
+subjects:
+- kind: ServiceAccount
+  name: wormhole
+  namespace: wormhole
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: kube-system
+  name: wormhole
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: wormhole
+subjects:
+- kind: ServiceAccount
+  name: wormhole
+  namespace: wormhole
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wormhole
+  namespace: wormhole
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: wormhole
+  namespace: wormhole
+  labels:
+    app: wormhole
+spec:
+  selector:
+    matchLabels:
+      k8s-app: wormhole
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        k8s-app: wormhole
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+    spec:
+      hostNetwork: true
+      serviceAccountName: wormhole
+      # Short duration for rolling restarts
+      terminationGracePeriodSeconds: 5
+      selector:
+
+      nodeSelector:
+        beta.kubernetes.io/arch: amd64
+      tolerations:
+        # Tolerate all taints
+        - effect: NoSchedule
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+      containers:
+        # Run a wormhole container on each node
+        # Configures wireguard / CNI on each node
+        - name: wormhole
+          image: quay.io/gravitational/wormhole-dev:0.0.1-9-g696cc34-dirty
+          command:
+            - /wormhole
+          args:
+            - controller
+            - --overlay-cidr=10.244.0.0/16
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          securityContext:
+            readOnlyRootFilesystem: true
+            capabilities:
+              add: ["NET_ADMIN"]
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100m
+          volumeMounts:
+            - mountPath: /host/opt/cni/bin
+              name: cni-bin-dir
+            - mountPath: /host/etc/cni/net.d
+              name: cni-net-dir
+            - mountPath: /tmp
+              name: tmpfs
+      volumes:
+        # Used to install CNI.
+        - name: cni-bin-dir
+          hostPath:
+            path: /opt/cni/bin
+        - name: cni-net-dir
+          hostPath:
+            path: /etc/cni/net.d
+        - name: tmpfs
+          emptyDir:
+            medium: Memory
