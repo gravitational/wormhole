@@ -199,7 +199,7 @@ spec:
         # Run a wormhole container on each node
         # Configures wireguard / CNI on each node
         - name: wormhole
-          image: quay.io/gravitational/wormhole-dev:0.0.1-9-g696cc34-dirty
+          image: quay.io/gravitational/wormhole-dev:0.1
           command:
             - /wormhole
           args:
