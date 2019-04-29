@@ -344,24 +344,24 @@ func (c *controller) startNodeDeletionWatcher(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-time.After(sleepDuration):
-				c.checkNodeDeletion()
-
+				err = c.checkNodeDeletion()
+				if err != nil {
+					c.Info("Error checking for node deletion: ", trace.DebugReport(err))
+				}
 			}
 		}
 	}()
 }
 
-func (c *controller) checkNodeDeletion() {
+func (c *controller) checkNodeDeletion() error {
 	nodes, err := c.client.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
-		c.WithError(err).Warn("Failed to list kubernetes node objects.")
-		return
+		return trace.Wrap(err, "failed to list kubernetes node objects.")
 	}
 
 	wgnodes, err := c.nodeLister.List(labels.NewSelector())
 	if err != nil {
-		c.WithError(err).Warn("Failed to list wgnode objects.")
-		return
+		return trace.Wrap(err, "failed to list wgnode objects")
 	}
 
 	m := make(map[string]bool)
@@ -378,6 +378,7 @@ func (c *controller) checkNodeDeletion() {
 			}
 		}
 	}
+	return nil
 }
 
 const nodeSleepInterval = 1 * time.Minute

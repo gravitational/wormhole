@@ -409,7 +409,7 @@ func TestCalculateNodeSleepInterval(t *testing.T) {
 			d := calculateNextNodeSleepInterval(tt.count)
 			assert.GreaterOrEqual(t, int64(d), int64(tt.minDuration), "%v < %v < %v", tt.minDuration, d, tt.maxDuration)
 			assert.LessOrEqual(t, int64(d), int64(tt.maxDuration), "%v < %v < %v", tt.minDuration, d, tt.maxDuration)
-			totalDuration = totalDuration + d
+			totalDuration += d
 		}
 
 		// the average time across all iterations should be close to the average of count * nodeSleepInterval
@@ -417,8 +417,8 @@ func TestCalculateNodeSleepInterval(t *testing.T) {
 		avg := totalDuration.Seconds() / float64(iterations)
 		min := (nodeSleepInterval - 3*time.Second).Seconds() * float64(tt.count)
 		max := (nodeSleepInterval + 3*time.Second).Seconds() * float64(tt.count)
-		assert.GreaterOrEqual(t, avg, float64(min), "%v < %v < %v", min, avg, max)
-		assert.LessOrEqual(t, avg, float64(max), "%v < %v < %v", min, avg, max)
+		assert.GreaterOrEqual(t, avg, min, "%v < %v < %v", min, avg, max)
+		assert.LessOrEqual(t, avg, max, "%v < %v < %v", min, avg, max)
 	}
 }
 
@@ -430,7 +430,7 @@ func TestCheckNodeDeletion(t *testing.T) {
 		expected []v1beta1.Wgnode
 	}{
 		{
-			message: "test1",
+			message: "wgnode1/3 removal",
 			nodes: []v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -494,7 +494,8 @@ func TestCheckNodeDeletion(t *testing.T) {
 			time.Sleep(1 * time.Millisecond)
 		}
 
-		cont.checkNodeDeletion()
+		err := cont.checkNodeDeletion()
+		assert.NoError(t, err, tt.message)
 		wgnodes, err := cont.crdClient.WormholeV1beta1().Wgnodes(cont.config.Namespace).List(metav1.ListOptions{})
 		assert.NoError(t, err, tt.message)
 		assert.Equal(t, tt.expected, wgnodes.Items, tt.message)
