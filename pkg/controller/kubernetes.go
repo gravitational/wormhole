@@ -16,6 +16,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -324,4 +325,80 @@ func (c *controller) updatePeerSecrets(overwrite bool) error {
 	// and it will be processed when our watchers get the updated object
 	_, err = c.client.CoreV1().Secrets(c.config.Namespace).Update(secretObject)
 	return trace.Wrap(err)
+}
+
+// startNodeDeletionWatcher checks for the deletion of the underlying node object from kubernetes, and if a node is
+// missing it removes the matching wgnode object.
+func (c *controller) startNodeDeletionWatcher(ctx context.Context) {
+	go func() {
+		for {
+			nodes, err := c.client.CoreV1().Nodes().List(metav1.ListOptions{})
+			if err != nil {
+				c.WithError(err).Warn("Failed to list kubernetes node objects.")
+				continue
+			}
+
+			sleepDuration := calculateNextNodeSleepInterval(len(nodes.Items))
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(sleepDuration):
+				err = c.checkNodeDeletion()
+				if err != nil {
+					c.Info("Error checking for node deletion: ", trace.DebugReport(err))
+				}
+			}
+		}
+	}()
+}
+
+func (c *controller) checkNodeDeletion() error {
+	nodes, err := c.client.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		return trace.Wrap(err, "failed to list kubernetes node objects.")
+	}
+
+	wgnodes, err := c.nodeLister.List(labels.NewSelector())
+	if err != nil {
+		return trace.Wrap(err, "failed to list wgnode objects")
+	}
+
+	m := make(map[string]bool)
+	for _, node := range nodes.Items {
+		m[node.Name] = true
+	}
+
+	for _, wgn := range wgnodes {
+		if _, ok := m[wgn.Name]; !ok {
+			c.WithField("name", wgn.Name).Info("Deleting wgnode object that doesn't have matching kubernetes node")
+			err = c.crdClient.WormholeV1beta1().Wgnodes(c.config.Namespace).Delete(wgn.Name, &metav1.DeleteOptions{})
+			if err != nil {
+				c.WithError(err).Warn("Failed to delete wgnode object that doesn't have matching kubernetes node")
+			}
+		}
+	}
+	return nil
+}
+
+const nodeSleepInterval = 1 * time.Minute
+
+// calculateNextNodeSleepInterval calculates a sleep interval that's relative to the size of the cluster
+// which should average around 1 check per nodeSleepInterval across each node participating
+// with a nodeSleepInterval of 60s
+// 1 node - 15s to 105s avg 60s
+// 2 node - 30s to 210s avg 120s
+// 3 node - 45s to 315s avg 180s
+// 4 node - 60s to 420s avg 240s
+func calculateNextNodeSleepInterval(nodeCount int) time.Duration {
+	// each node runs the controller, so depending on the size of the cluster, slow down each individual node
+	currentInterval := nodeSleepInterval * time.Duration(nodeCount)
+	var delta = 0.75 * float64(currentInterval)
+	var minInterval = float64(currentInterval) - delta
+	var maxInterval = float64(currentInterval) + delta
+
+	// Get a random value from the range [minInterval, maxInterval].
+	// The formula used below has a +1 because if the minInterval is 1 and the maxInterval is 3 then
+	// we want a 33% chance for selecting either 1, 2 or 3.
+	return time.Duration(minInterval + (rand.Float64() * (maxInterval - minInterval + 1)))
 }

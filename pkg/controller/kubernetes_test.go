@@ -343,6 +343,165 @@ func TestUpdatePeerSecrets(t *testing.T) {
 
 }
 
+func TestCalculateNodeSleepInterval(t *testing.T) {
+	cases := []struct {
+		count       int
+		minDuration time.Duration
+		maxDuration time.Duration
+	}{
+		{
+			count:       1,
+			minDuration: 15 * time.Second,
+			maxDuration: 105 * time.Second,
+		},
+		{
+			count:       2,
+			minDuration: 30 * time.Second,
+			maxDuration: 210 * time.Second,
+		},
+		{
+			count:       3,
+			minDuration: 45 * time.Second,
+			maxDuration: 315 * time.Second,
+		},
+		{
+			count:       4,
+			minDuration: 60 * time.Second,
+			maxDuration: 420 * time.Second,
+		},
+		{
+			count:       5,
+			minDuration: 75 * time.Second,
+			maxDuration: 525 * time.Second,
+		},
+		{
+			count:       6,
+			minDuration: 90 * time.Second,
+			maxDuration: 630 * time.Second,
+		},
+		{
+			count:       7,
+			minDuration: 105 * time.Second,
+			maxDuration: 735 * time.Second,
+		},
+		{
+			count:       8,
+			minDuration: 120 * time.Second,
+			maxDuration: 840 * time.Second,
+		},
+		{
+			count:       9,
+			minDuration: 135 * time.Second,
+			maxDuration: 945 * time.Second,
+		},
+		{
+			count:       10,
+			minDuration: 140 * time.Second,
+			maxDuration: 1050 * time.Second,
+		},
+	}
+
+	for _, tt := range cases {
+		var totalDuration time.Duration
+		iterations := 1000
+		// because calculateNextNodeSleepInterval uses random numbers, run the check several times
+		for i := 0; i < iterations; i++ {
+			d := calculateNextNodeSleepInterval(tt.count)
+			assert.GreaterOrEqual(t, int64(d), int64(tt.minDuration), "%v < %v < %v", tt.minDuration, d, tt.maxDuration)
+			assert.LessOrEqual(t, int64(d), int64(tt.maxDuration), "%v < %v < %v", tt.minDuration, d, tt.maxDuration)
+			totalDuration += d
+		}
+
+		// the average time across all iterations should be close to the average of count * nodeSleepInterval
+		// so if there are 2 nodes and the target interval is 1 minute, the average should be close to 2 minutes +/- 5%
+		avg := totalDuration.Seconds() / float64(iterations)
+		min := (nodeSleepInterval - 3*time.Second).Seconds() * float64(tt.count)
+		max := (nodeSleepInterval + 3*time.Second).Seconds() * float64(tt.count)
+		assert.GreaterOrEqual(t, avg, min, "%v < %v < %v", min, avg, max)
+		assert.LessOrEqual(t, avg, max, "%v < %v < %v", min, avg, max)
+	}
+}
+
+func TestCheckNodeDeletion(t *testing.T) {
+	cases := []struct {
+		message  string
+		nodes    []v1.Node
+		wgnodes  []v1beta1.Wgnode
+		expected []v1beta1.Wgnode
+	}{
+		{
+			message: "wgnode1/3 removal",
+			nodes: []v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node2",
+					},
+				},
+			},
+			wgnodes: []v1beta1.Wgnode{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node1",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node2",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node3",
+					},
+				},
+			},
+			expected: []v1beta1.Wgnode{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "node2",
+						Namespace: "test",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range cases {
+		cont := &controller{
+			FieldLogger: logrus.WithField("logger", "test"),
+			client:      testclient.NewSimpleClientset(),
+			crdClient:   wormholeclientset.NewSimpleClientset(),
+			config: Config{
+				Namespace: "test",
+			},
+		}
+
+		cont.startNodeWatcher(context.TODO())
+		for _, n := range tt.nodes {
+			_, err := cont.client.CoreV1().Nodes().Create(n.DeepCopy())
+			assert.NoError(t, err, tt.message)
+		}
+		for _, n := range tt.wgnodes {
+			_, err := cont.crdClient.WormholeV1beta1().Wgnodes(cont.config.Namespace).Create(n.DeepCopy())
+			assert.NoError(t, err, tt.message)
+		}
+
+		// wait for the node lister to populate
+		for {
+			if _, err := cont.nodeLister.Wgnodes(cont.config.Namespace).Get(tt.wgnodes[0].Name); err == nil {
+				break
+			}
+			time.Sleep(1 * time.Millisecond)
+		}
+
+		err := cont.checkNodeDeletion()
+		assert.NoError(t, err, tt.message)
+		wgnodes, err := cont.crdClient.WormholeV1beta1().Wgnodes(cont.config.Namespace).List(metav1.ListOptions{})
+		assert.NoError(t, err, tt.message)
+		assert.Equal(t, tt.expected, wgnodes.Items, tt.message)
+	}
+}
+
 type mockWireguardInterface struct {
 	sync.Mutex
 	publicKey string
