@@ -204,6 +204,7 @@ spec:
             - /wormhole
           args:
             - controller
+            - --overlay-cidr=10.244.0.0/16
           env:
             - name: POD_NAME
               valueFrom:
