@@ -19,11 +19,20 @@ The Gravitational Wormhole project is currently considered experimental, and has
 1. [WireGuard](https://www.wireguard.com/install/) is installed on each node in you're cluster.
 2. A Kubernetes cluster with IPAM enabled (--pod-network-cidr= when using kubeadm based install)
 
-### Install
+### Install (Kubeadm Cluster)
 ```console
 kubectl apply -f https://raw.githubusercontent.com/gravitational/wormhole/master/docs/kube-wormhole.yaml
 ```
 
+Note: The kubeadm cluster must be initialized with (--pod-network-cidr / --service-cidr) to enable IPAM
+
+### Install (Generic)
+```console
+kubectl apply -f https://raw.githubusercontent.com/gravitational/wormhole/master/docs/generic-wormhole.yaml
+```
+
+Note: Replace the --overlay-cidr flag in the daemonset with the overlay-cidr that matches you're network
+Note: Kubernetes IPAM must be enabled (--cluster-cidr / --allocate-node-cidrs on kube-controller-manager)
 
 ## Build and Publish to a docker registry
 
