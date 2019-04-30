@@ -22,6 +22,14 @@ kind: Namespace
 metadata:
   name: wormhole
 ---
+apiVersion: scheduling.k8s.io/v1beta1
+kind: PriorityClass
+metadata:
+  name: wormhole-high-priority
+value: 1000000
+globalDefault: false
+description: "This priority class should be used for wormhole controller pods only."
+---
 apiVersion: extensions/v1beta1
 kind: PodSecurityPolicy
 metadata:
@@ -31,7 +39,9 @@ metadata:
   name: wormhole
   namespace: wormhole
 spec:
-  allowedCapabilities: ["NET_ADMIN"]
+  allowedCapabilities:
+  - NET_ADMIN
+  - NET_RAW
   fsGroup:
     rule: RunAsAny
   hostPorts:
@@ -180,6 +190,8 @@ spec:
         k8s-app: wormhole
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ''
+        container.apparmor.security.beta.kubernetes.io/wormhole: runtime/default
+        seccomp.security.alpha.kubernetes.io/pod: runtime/default
     spec:
       hostNetwork: true
       serviceAccountName: wormhole
@@ -195,11 +207,12 @@ spec:
           operator: Exists
         - effect: NoExecute
           operator: Exists
+      priorityClassName: wormhole-high-priority
       containers:
         # Run a wormhole container on each node
         # Configures wireguard / CNI on each node
         - name: wormhole
-          image: quay.io/gravitational/wormhole:0.1
+          image: quay.io/gravitational/wormhole-dev:0.0.1-knisbet.2
           command:
             - /wormhole
           args:
@@ -214,14 +227,24 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
           securityContext:
+            allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            runAsNonRoot: false
+            runAsUser: 0
             capabilities:
-              add: ["NET_ADMIN"]
+              drop:
+              - all
+              add: 
+              - NET_ADMIN
+              - NET_RAW
           imagePullPolicy: Always
           resources:
             requests:
               cpu: 100m
-              memory: 100m
+              memory: 100M
+            limits:
+              cpu: 100m
+              memory: 100M
           volumeMounts:
             - mountPath: /host/opt/cni/bin
               name: cni-bin-dir
