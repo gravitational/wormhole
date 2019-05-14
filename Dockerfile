@@ -57,4 +57,5 @@ RUN mkdir -p /opt/cni/bin && curl -L --retry 5 https://github.com/containernetwo
 
 
 ADD build/wormhole /wormhole
+RUN setcap cap_net_admin=+ep /wormhole && setcap cap_net_raw=+ep /wormhole
 CMD ["/wormhole"]  

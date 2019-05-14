@@ -155,7 +155,6 @@ spec:
         k8s-app: wormhole
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ''
-        container.apparmor.security.beta.kubernetes.io/wormhole: runtime/default
         seccomp.security.alpha.kubernetes.io/pod: runtime/default
     spec:
       hostNetwork: true
