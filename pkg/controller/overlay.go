@@ -89,7 +89,7 @@ func loadOverlayCidrFromKubeadm(client kubernetes.Interface) (string, error) {
 // loadOverlayCidrFromPlanet attempts to load planet subnet information from the planet /etc/container-environment file
 func (d *controller) loadOverlayCidrFromPlanet() (string, error) {
 	d.Info("Attempting to retrieve overlayCIDR from planet")
-	env, err := ioutil.ReadFile("/etc/container-environment")
+	env, err := ioutil.ReadFile("/host/etc/container-environment")
 	if err != nil {
 		return "", trace.ConvertSystemError(err)
 	}
