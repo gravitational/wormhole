@@ -16,6 +16,7 @@ package controller
 import (
 	"encoding/json"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 
 	"github.com/gravitational/trace"
@@ -66,6 +67,13 @@ func (d *controller) configureCNI() error {
 	if runningInPod() {
 		path = filepath.Join("/host", path)
 	}
+
+	// Workaround for if the system has the directory as owned by the wrong user (it should be root)
+	err = os.Chown(filepath.Dir(path), 0, 0)
+	if err != nil {
+		return trace.Wrap(err).AddField("dir", filepath.Dir(path))
+	}
+
 	err = ioutil.WriteFile(path, jsonConf, 0644)
 	if err != nil {
 		return trace.Wrap(err)

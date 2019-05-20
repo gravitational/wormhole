@@ -87,12 +87,12 @@
   version = "v0.2.0"
 
 [[projects]]
-  digest = "1:158b17552c02e52c13b4510f14a6ada213744e3a625fd108d7018874401ea68e"
+  digest = "1:a38ece3bf6177289037ea38704ab34fbf0a089d141bde26c36ede7581907de4b"
   name = "github.com/gravitational/trace"
   packages = ["."]
   pruneopts = "T"
-  revision = "3318e711adee0b3f48d3399ebf5aaddf329a2b4f"
-  version = "1.1.5"
+  revision = "a5c40b57db7203332a073f20771214d0eeb2a168"
+  version = "1.1.7"
 
 [[projects]]
   branch = "master"

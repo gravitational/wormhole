@@ -42,6 +42,7 @@ spec:
   allowedCapabilities:
   - NET_ADMIN
   - NET_RAW
+  - CHOWN
   fsGroup:
     rule: RunAsAny
   hostPorts:
@@ -55,6 +56,7 @@ spec:
     rule: RunAsAny
   volumes:
   - '*'
+  hostNetwork: true
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
@@ -190,8 +192,7 @@ spec:
         k8s-app: wormhole
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ''
-        container.apparmor.security.beta.kubernetes.io/wormhole: runtime/default
-        seccomp.security.alpha.kubernetes.io/pod: runtime/default
+        seccomp.security.alpha.kubernetes.io/pod: docker/default
     spec:
       hostNetwork: true
       serviceAccountName: wormhole
@@ -237,6 +238,7 @@ spec:
               add: 
               - NET_ADMIN
               - NET_RAW
+              - CHOWN
           imagePullPolicy: Always
           resources:
             requests:

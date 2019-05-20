@@ -47,7 +47,7 @@ var (
 	// wireguardBuildImage is the docker image to use to build the wg cli tool
 	wireguardBuildImage = "ubuntu:18.10"
 	// rigImage is the imageref to get the rigging tool from
-	rigImage = "quay.io/gravitational/rig:5.3.1"
+	rigImage = "quay.io/gravitational/rig:6.0.1"
 
 	// buildVersion allows override of the version string from env variable
 	buildVersion = env("WORM_BUILD_VERSION", "")
