@@ -30,7 +30,7 @@ value: 1000000
 globalDefault: false
 description: "This priority class should be used for wormhole controller pods only."
 ---
-apiVersion: extensions/v1beta1
+apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
   annotations:
