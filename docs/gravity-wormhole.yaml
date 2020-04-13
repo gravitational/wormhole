@@ -227,6 +227,9 @@ spec:
               name: container-environment
             - mountPath: /tmp
               name: tmpfs
+            # Used for iptables lock
+            - mountPath: /run
+              name: run
       volumes:
         # Used to install CNI.
         - name: cni-bin-dir
@@ -239,5 +242,8 @@ spec:
           hostPath:
             path: /etc/container-environment
         - name: tmpfs
+          emptyDir:
+            medium: Memory
+        - name: run
           emptyDir:
             medium: Memory

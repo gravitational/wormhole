@@ -255,6 +255,9 @@ spec:
               name: cni-net-dir
             - mountPath: /tmp
               name: tmpfs
+            # Used for iptables lock
+            - mountPath: /run
+              name: run
       volumes:
         # Used to install CNI.
         - name: cni-bin-dir
@@ -264,5 +267,8 @@ spec:
           hostPath:
             path: /etc/cni/net.d
         - name: tmpfs
+          emptyDir:
+            medium: Memory
+        - name: run
           emptyDir:
             medium: Memory
