@@ -43,9 +43,9 @@ var (
 	registryImage = env("WORM_REGISTRY_IMAGE", "quay.io/gravitational/wormhole-dev")
 
 	// baseImage is the base OS image to use for wormhole containers
-	baseImage = "ubuntu:18.10"
+	baseImage = "ubuntu:19.10"
 	// wireguardBuildImage is the docker image to use to build the wg cli tool
-	wireguardBuildImage = "ubuntu:18.10"
+	wireguardBuildImage = "ubuntu:19.10"
 	// rigImage is the imageref to get the rigging tool from
 	rigImage = "quay.io/gravitational/rig:6.0.1"
 
