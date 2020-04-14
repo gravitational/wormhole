@@ -194,7 +194,7 @@ func runController(cmd *cobra.Command, args []string) error {
 // If the /host/opt/cni/bin directory exists, copy the plugins to the host
 func syncCniBin() error {
 	if _, err := os.Stat("/host/opt/cni/bin"); !os.IsNotExist(err) {
-		err = sh.Run("bash", "-c", "cp /opt/cni/bin/* /host/opt/cni/bin/")
+		err = sh.Run("bash", "-c", "chown root:root -R /host/opt/cni/bin && cp /opt/cni/bin/* /host/opt/cni/bin/")
 		if err != nil {
 			return trace.Wrap(err)
 		}
