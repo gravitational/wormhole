@@ -73,6 +73,10 @@ func (d *controller) configureCNI() error {
 	if err != nil {
 		return trace.Wrap(err).AddField("dir", filepath.Dir(path))
 	}
+	err = os.Chown(path, 0, 0)
+	if err != nil {
+		return trace.Wrap(err).AddField("path", path)
+	}
 
 	err = ioutil.WriteFile(path, jsonConf, 0644)
 	if err != nil {
