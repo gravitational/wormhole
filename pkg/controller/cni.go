@@ -68,9 +68,14 @@ func (d *controller) configureCNI() error {
 		path = filepath.Join("/host", path)
 	}
 
+	err = os.MkdirAll(filepath.Dir(path), 755)
+	if err != nil && !trace.IsAlreadyExists(err) {
+		return trace.Wrap(err).AddField("dir", filepath.Dir(path))
+	}
+
 	// Workaround for if the system has the directory as owned by the wrong user (it should be root)
 	err = os.Chown(filepath.Dir(path), 0, 0)
-	if err != nil && !trace.IsNotFound(err) {
+	if err != nil {
 		return trace.Wrap(err).AddField("dir", filepath.Dir(path))
 	}
 	err = os.Chown(path, 0, 0)
