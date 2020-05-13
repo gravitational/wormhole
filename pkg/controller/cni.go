@@ -68,7 +68,7 @@ func (d *controller) configureCNI() error {
 		path = filepath.Join("/host", path)
 	}
 
-	err = os.MkdirAll(filepath.Dir(path), 755)
+	err = os.MkdirAll(filepath.Dir(path), 0755)
 	if err != nil && !trace.IsAlreadyExists(err) {
 		return trace.Wrap(err).AddField("dir", filepath.Dir(path))
 	}
