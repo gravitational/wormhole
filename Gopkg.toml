@@ -33,9 +33,13 @@ required = [
 [prune]
   go-tests = true
 
+[[constraint]]
+  name = "github.com/gravitational/magnet"
+  branch = "master"
+
 [[override]]
   name = "github.com/magefile/mage"
-  revision = "4adc5568e96ddcd37eefca5ead057f61ff4f0103"
+  revision = "673a9fe9b093dbdf2b171b1e7d5923900982ac48"
   source = "github.com/knisbet/mage"
 
 [[override]]

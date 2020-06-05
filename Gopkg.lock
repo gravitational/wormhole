@@ -226,11 +226,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:63086d3c72c7d14fe61a3e2de64ad6f3c8d73a3f9054e060294ebe21153254a5"
+  digest = "1:1ad9d2ce35be81b752553b41fbf3f9bca2476fd46f2f557a0bf0de930f78099f"
   name = "github.com/gravitational/magnet"
   packages = ["."]
   pruneopts = "T"
-  revision = "6fa494cb3746d5bd4171b5a5bfc9fbe4e5d54466"
+  revision = "01ed87eaa5f258cbd8da26001ea7f98720c958ba"
 
 [[projects]]
   digest = "1:a38ece3bf6177289037ea38704ab34fbf0a089d141bde26c36ede7581907de4b"
@@ -319,7 +319,7 @@
   version = "v1.0.1"
 
 [[projects]]
-  digest = "1:3e3babf2c9b2efdfa9a4ce22bd56341afa412c8fcc57d900ca23228e7140610f"
+  digest = "1:54bb5d89c1e42944d680fc700a8dd39777ae53dbb6509ea8b339807e183b0c35"
   name = "github.com/magefile/mage"
   packages = [
     "internal",
@@ -330,7 +330,7 @@
     "target",
   ]
   pruneopts = "T"
-  revision = "0cea2171c18e426a8563a4408209aeb6a451806d"
+  revision = "673a9fe9b093dbdf2b171b1e7d5923900982ac48"
   source = "github.com/knisbet/mage"
 
 [[projects]]
