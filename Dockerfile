@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.1.7-experimental
+
 ARG WIREGUARD_IMAGE
 ARG BASE_IMAGE
 ARG RIGGING_IMAGE
@@ -9,9 +11,11 @@ FROM ${WIREGUARD_IMAGE} as wireguard
 ADD assets/docker/wireguard/wireguard_ubuntu_wireguard.gpg /etc/apt/trusted.gpg.d/wireguard_ubuntu_wireguard.gpg
 ADD assets/docker/wireguard/wireguard-ubuntu-wireguard-bionic.list /etc/apt/sources.list.d/wireguard-ubuntu-wireguard-bionic.list
 
-RUN apt-get update && \
-    apt-get install --no-install-recommends -y \
-    wireguard
+RUN --mount=type=cache,sharing=locked,id=wormhole-aptlib,target=/var/lib/apt \
+    --mount=type=cache,sharing=locked,id=wormhole-aptcache,target=/var/cache/apt \
+        apt-get update && \
+        apt-get install --no-install-recommends -y \
+        wireguard
 
 #
 # Pull in rig container to copy rig binary to support gravity upgrade/rollback
@@ -26,15 +30,16 @@ FROM ${BASE_IMAGE}
 ARG CNI_VERSION
 ARG ARCH
 
-RUN apt-get update && \
-    apt-get install --no-install-recommends -y \
-    iproute2 \
-    net-tools \
-    iptables \
-    curl \
-    ca-certificates \
-    && update-ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,sharing=locked,id=wormhole-aptlib,target=/var/lib/apt \
+    --mount=type=cache,sharing=locked,id=wormhole-aptcache,target=/var/cache/apt \
+        apt-get update && \
+        apt-get install --no-install-recommends -y \
+        iproute2 \
+        net-tools \
+        iptables \
+        curl \
+        ca-certificates \
+        && update-ca-certificates
 
 #
 # Install/Upgrade/Rollback interactions for a gravity cluster

@@ -44,7 +44,6 @@ func main() {
 	vanity.ForEachFile(files, vanity.TurnOnSizerAll)
 	vanity.ForEachFile(files, vanity.TurnOnUnmarshalerAll)
 
-	vanity.ForEachFile(files, vanity.TurnOffGoEnumPrefixAll)
 	vanity.ForEachFile(files, vanity.TurnOffGoEnumStringerAll)
 	vanity.ForEachFile(files, vanity.TurnOnEnumStringerAll)
 
@@ -58,7 +57,7 @@ func main() {
 		if strings.HasSuffix(file.GetName(), "struct.proto") {
 			// TODO struct can also get a compare method when
 			// https://github.com/gogo/protobuf/issues/221 is fixed
-			continue
+			//continue
 		}
 		vanity.TurnOnCompareAll(file)
 	}

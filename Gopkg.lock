@@ -2,12 +2,94 @@
 
 
 [[projects]]
+  digest = "1:39805d87640f58a20344f21f0158299802dc6395464ba3848b9aec8b068057ea"
+  name = "github.com/Microsoft/go-winio"
+  packages = [
+    ".",
+    "pkg/guid",
+    "vhd",
+  ]
+  pruneopts = "T"
+  revision = "6c72808b55902eae4c5943626030429ff20f3b63"
+  version = "v0.4.14"
+
+[[projects]]
+  digest = "1:59e1d65830f2b2d7b6fb8a310b06e07762fee7867bc14bd94f10e2de1d9fcdfb"
+  name = "github.com/Microsoft/hcsshim"
+  packages = [
+    ".",
+    "internal/cow",
+    "internal/hcs",
+    "internal/hcserror",
+    "internal/hns",
+    "internal/interop",
+    "internal/log",
+    "internal/logfields",
+    "internal/longpath",
+    "internal/mergemaps",
+    "internal/oc",
+    "internal/safefile",
+    "internal/schema1",
+    "internal/schema2",
+    "internal/timeout",
+    "internal/vmcompute",
+    "internal/wclayer",
+    "osversion",
+  ]
+  pruneopts = "T"
+  revision = "5bc557dd210ff2caf615e6e22d398123de77fc11"
+  version = "v0.8.9"
+
+[[projects]]
   digest = "1:166438587ed45ac211dab8a3ecebf4fa0c186d0db63430fb9127bbc2e5fcdc67"
   name = "github.com/cenkalti/backoff"
   packages = ["."]
   pruneopts = "T"
   revision = "1e4cf3da559842a91afcb6ea6141451e6c30c618"
   version = "v2.1.1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:e1133f457eabcc83e5746b9fca4753e82f4593bef25925d16b2dd2bb4f2f88a8"
+  name = "github.com/containerd/cgroups"
+  packages = ["stats/v1"]
+  pruneopts = "T"
+  revision = "0dbf7f05ba59274095946e2c0c89540726e8a8aa"
+
+[[projects]]
+  digest = "1:b21196a62c6555078a8a953065d4269221405916690e3c01a809efdc8a15d74e"
+  name = "github.com/containerd/console"
+  packages = ["."]
+  pruneopts = "T"
+  revision = "8375c3424e4d7b114e8a90a4a40c8e1b40d1d4e6"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:4e5252bfed5016df2521f06ab12848c18aa13cf918999db4508fbb5ecc41a2ab"
+  name = "github.com/containerd/containerd"
+  packages = [
+    "api/services/content/v1",
+    "content",
+    "content/local",
+    "content/proxy",
+    "errdefs",
+    "filters",
+    "log",
+    "platforms",
+    "services/content/contentserver",
+    "sys",
+  ]
+  pruneopts = "T"
+  revision = "814b7956fafc7a0980ea07e950f983d0837e5578"
+  version = "v1.3.4"
+
+[[projects]]
+  branch = "master"
+  digest = "1:39c3e5953b64d82222b99dd6743751937affe89a1fd001156330e77db0fd28c5"
+  name = "github.com/containerd/continuity"
+  packages = ["sysx"]
+  pruneopts = "T"
+  revision = "d3ef23f19fbb106bb73ffde425d07a9187e30745"
 
 [[projects]]
   digest = "1:60b95a4be187c8b8a72fdc1bd8d351ae05d98da6e65950b2a68c71ad9c3009f4"
@@ -26,6 +108,25 @@
   version = "v1.1.1"
 
 [[projects]]
+  digest = "1:d4f83648c3259dd3d07b0f98d505d3e2d2fd0c9388671a76d0e54041b8006338"
+  name = "github.com/docker/distribution"
+  packages = [
+    "digestset",
+    "reference",
+  ]
+  pruneopts = "T"
+  revision = "2461543d988979529609e8cb6fca9ca190dc48da"
+  version = "v2.7.1"
+
+[[projects]]
+  digest = "1:35f95b4fb8c511e29f40dfb1434f91f05cf30defa1f8a0ec1549e054a9960ce7"
+  name = "github.com/docker/docker"
+  packages = ["pkg/fileutils"]
+  pruneopts = "T"
+  revision = "77e06fda0c9457c99a210e9648c064b44805fa2d"
+  version = "v19.03.11"
+
+[[projects]]
   digest = "1:90171b862cb6ec187304a593e4d78bfcbcf0f4394870eb66e0eb62cc06b144ad"
   name = "github.com/evanphx/json-patch"
   packages = ["."]
@@ -34,29 +135,58 @@
   version = "v4.1.0"
 
 [[projects]]
-  digest = "1:da39f4a22829ca95e63566208e0ea42d6f055f41dff1b14fdab88d88f62df653"
-  name = "github.com/gogo/protobuf"
-  packages = [
-    "proto",
-    "sortkeys",
-  ]
+  digest = "1:d7b2d6ad2a9768bb5c9e3bfa4d9ceaa635ca2737cca288507986f116fa4b8da2"
+  name = "github.com/gofrs/flock"
+  packages = ["."]
   pruneopts = "T"
-  revision = "636bf0302bc95575d69441b25a2603156ffdddf1"
-  version = "v1.1.1"
+  revision = "392e7fae8f1b0bdbd67dad7237d23f618feb6dbb"
+  version = "v0.7.1"
 
 [[projects]]
-  digest = "1:a2ecb56e5053d942aafc86738915fb94c9131bac848c543b8b6764365fd69080"
+  digest = "1:ebb6df8bcfc8671d30700307da4e7338b82f354d355f919ba70ef1e7b66d39a3"
+  name = "github.com/gogo/googleapis"
+  packages = ["google/rpc"]
+  pruneopts = "T"
+  revision = "3a822044bc0ae0a330a7449d52de760218351d49"
+  version = "v1.4.0"
+
+[[projects]]
+  digest = "1:6ba54872416168c7f2a8349a681f919ead947cacde2d8e663dfbafeeaf13b17a"
+  name = "github.com/gogo/protobuf"
+  packages = [
+    "gogoproto",
+    "proto",
+    "protoc-gen-gogo/descriptor",
+    "sortkeys",
+    "types",
+  ]
+  pruneopts = "T"
+  revision = "5628607bb4c51c3157aacc3a50f0ab707582b805"
+  version = "v1.3.1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:e12b13fc80e2fe638545bdf2468388fafd34d3060ffd8672cca60573ca3e5d99"
+  name = "github.com/golang/groupcache"
+  packages = ["lru"]
+  pruneopts = "T"
+  revision = "8c9f03a8e57eb486e42badaed3fb287da51807ba"
+
+[[projects]]
+  digest = "1:8be75099586ec794fb93c467584431c6725a44648463721df4601bee8550a168"
   name = "github.com/golang/protobuf"
   packages = [
+    "internal/gengogrpc",
     "proto",
+    "protoc-gen-go",
     "ptypes",
     "ptypes/any",
     "ptypes/duration",
     "ptypes/timestamp",
   ]
   pruneopts = "T"
-  revision = "aa810b61a9c79d51363740d207bb46cf8e620ed5"
-  version = "v1.2.0"
+  revision = "d04d7b157bb510b1e0c10132224b616ac0e26b17"
+  version = "v1.4.2"
 
 [[projects]]
   branch = "master"
@@ -75,6 +205,14 @@
   revision = "24818f796faf91cd76ec7bddd72458fbced7a6c1"
 
 [[projects]]
+  branch = "master"
+  digest = "1:ae4407ca7731ceb7b54b059fced30f335d32486a2148e262b19067261f959b42"
+  name = "github.com/google/shlex"
+  packages = ["."]
+  pruneopts = "T"
+  revision = "e7afc7fbc51079733e9468cdfd1efcd7d196cd1d"
+
+[[projects]]
   digest = "1:35735e2255fa34521c2a1355fb2a3a2300bc9949f487be1c1ce8ee8efcfa2d04"
   name = "github.com/googleapis/gnostic"
   packages = [
@@ -85,6 +223,14 @@
   pruneopts = "T"
   revision = "7c663266750e7d82587642f65e60bc4083f1f84e"
   version = "v0.2.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:63086d3c72c7d14fe61a3e2de64ad6f3c8d73a3f9054e060294ebe21153254a5"
+  name = "github.com/gravitational/magnet"
+  packages = ["."]
+  pruneopts = "T"
+  revision = "6fa494cb3746d5bd4171b5a5bfc9fbe4e5d54466"
 
 [[projects]]
   digest = "1:a38ece3bf6177289037ea38704ab34fbf0a089d141bde26c36ede7581907de4b"
@@ -104,6 +250,14 @@
   ]
   pruneopts = "T"
   revision = "9cad4c3443a7200dd6400aef47183728de563a38"
+
+[[projects]]
+  branch = "master"
+  digest = "1:f5f6290273ed5caba6ef9aa9df376b87439dc9ca11fd208d06208abbce4554ec"
+  name = "github.com/grpc-ecosystem/grpc-opentracing"
+  packages = ["go/otgrpc"]
+  pruneopts = "T"
+  revision = "8e809c8a86450a29b90dcc9efbf062d0fe6d9746"
 
 [[projects]]
   digest = "1:8ec8d88c248041a6df5f6574b87bc00e7e0b493881dad2e7ef47b11dc69093b5"
@@ -133,6 +287,14 @@
   version = "v1.0"
 
 [[projects]]
+  digest = "1:6b466702b0114938ca5caad46bbe4906e0acdd8b34147348b6f1e2c1367ef224"
+  name = "github.com/jaguilar/vt100"
+  packages = ["."]
+  pruneopts = "T"
+  revision = "ad4c4a5743050fb7f88ce968dca9422f72a0e3f2"
+  source = "github.com/tonistiigi/vt100"
+
+[[projects]]
   digest = "1:75ab90ae3f5d876167e60f493beadfe66f0ed861a710f283fb06c86437a09538"
   name = "github.com/jonboulle/clockwork"
   packages = ["."]
@@ -157,9 +319,10 @@
   version = "v1.0.1"
 
 [[projects]]
-  digest = "1:6d931841ae42227fcc1aec1d664dede4cdea760a2d91f370f684dbf75681f4cb"
+  digest = "1:3e3babf2c9b2efdfa9a4ce22bd56341afa412c8fcc57d900ca23228e7140610f"
   name = "github.com/magefile/mage"
   packages = [
+    "internal",
     "mage",
     "mg",
     "parse",
@@ -167,8 +330,39 @@
     "target",
   ]
   pruneopts = "T"
-  revision = "a8460f7aa9523266febfca9df7a45025b7460152"
-  version = "v1.6.2"
+  revision = "0cea2171c18e426a8563a4408209aeb6a451806d"
+  source = "github.com/knisbet/mage"
+
+[[projects]]
+  digest = "1:aeba33f37967f35ff0882a82dcbebd70dc9440d17cab6e0dca4127635d4de405"
+  name = "github.com/moby/buildkit"
+  packages = [
+    "api/services/control",
+    "api/types",
+    "client",
+    "client/buildid",
+    "client/connhelper",
+    "client/llb",
+    "client/ociindex",
+    "frontend/gateway/client",
+    "frontend/gateway/grpcclient",
+    "frontend/gateway/pb",
+    "identity",
+    "session",
+    "session/content",
+    "session/filesync",
+    "session/grpchijack",
+    "solver/pb",
+    "util/apicaps",
+    "util/apicaps/pb",
+    "util/appdefaults",
+    "util/entitlements",
+    "util/progress/progressui",
+    "util/system",
+  ]
+  pruneopts = "T"
+  revision = "ddd175c5a2cc24530ea8ff427887c22939ca4289"
+  version = "v0.7.1"
 
 [[projects]]
   digest = "1:33422d238f147d247752996a26574ac48dcf472976eda7f5134015f06bf16563"
@@ -187,6 +381,53 @@
   version = "1.0.1"
 
 [[projects]]
+  digest = "1:aa3fad6856cba7b9cd0e3ebdac9ca4cf2292207a344c197df896667cd10d5995"
+  name = "github.com/morikuni/aec"
+  packages = ["."]
+  pruneopts = "T"
+  revision = "39771216ff4c63d11f5e604076f9c45e8be1067b"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:9d3c698d3efd43a9f1cdc7da1f38a58621657f3d93735ba95fe1b26b2ba4a2e1"
+  name = "github.com/opencontainers/go-digest"
+  packages = ["."]
+  pruneopts = "T"
+  revision = "ea51bea511f75cfa3ef6098cc253c5c3609b037a"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:eb47da2fdabb69f64ce3a42a1790ec0ed9da6718c8378f3fdc41cbe6af184519"
+  name = "github.com/opencontainers/image-spec"
+  packages = [
+    "specs-go",
+    "specs-go/v1",
+  ]
+  pruneopts = "T"
+  revision = "d60099175f88c47cd379c4738d158884749ed235"
+  version = "v1.0.1"
+
+[[projects]]
+  digest = "1:52254f0d6ce1358972c08cb1ecd91a449af3a7f927f829abec962613fb167403"
+  name = "github.com/opencontainers/runc"
+  packages = ["libcontainer/system"]
+  pruneopts = "T"
+  revision = "baf6536d6259209c3edfa2b22237af82942d3dfa"
+  version = "v0.1.1"
+
+[[projects]]
+  digest = "1:a88448fcd2802025fa764388e12f31f0a64d5d436b369a71b97a6c9da783fafe"
+  name = "github.com/opentracing/opentracing-go"
+  packages = [
+    ".",
+    "ext",
+    "log",
+  ]
+  pruneopts = "T"
+  revision = "659c90643e714681897ec2521c60567dd21da733"
+  version = "v1.1.0"
+
+[[projects]]
   branch = "master"
   digest = "1:0c29d499ffc3b9f33e7136444575527d0c3a9463a89b3cbeda0523b737f910b3"
   name = "github.com/petar/GoLLRB"
@@ -201,6 +442,14 @@
   pruneopts = "T"
   revision = "5f041e8faa004a95c88a202771f4cc3e991971e6"
   version = "v2.0.1"
+
+[[projects]]
+  digest = "1:9e1d37b58d17113ec3cb5608ac0382313c5b59470b94ed97d0976e69c7022314"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  pruneopts = "T"
+  revision = "614d223910a179a466c1767a985424175c39b465"
+  version = "v0.9.1"
 
 [[projects]]
   digest = "1:22aa691fe0213cb5c07d103f9effebcb7ad04bee45a0ce5fe5369d0ca2ec3a1f"
@@ -242,6 +491,25 @@
   revision = "34c6fa2dc70986bccbbffcc6130f6920a924b075"
 
 [[projects]]
+  branch = "master"
+  digest = "1:f53e00e850fdc2bf611a18ac78ecc5c5446f2815994722f7206cbf78068b2db8"
+  name = "github.com/tonistiigi/fsutil"
+  packages = [
+    ".",
+    "types",
+  ]
+  pruneopts = "T"
+  revision = "ae3a8d753069d0f76fbee396457e8b6cfd7cb8c3"
+
+[[projects]]
+  branch = "master"
+  digest = "1:67d471b41a1b416f3b9e647f44b33157a3b34ec62471211739fb444e2167cb9e"
+  name = "github.com/tonistiigi/units"
+  packages = ["."]
+  pruneopts = "T"
+  revision = "6950e57a87eaf136bbe44ef2ec8e75b9e3569de2"
+
+[[projects]]
   digest = "1:2d9d06cb9d46dacfdbb45f8575b39fc0126d083841a29d4fbf8d97708f43107e"
   name = "github.com/vishvananda/netlink"
   packages = [
@@ -259,6 +527,20 @@
   packages = ["."]
   pruneopts = "T"
   revision = "13995c7128ccc8e51e9a6bd2b551020a27180abd"
+
+[[projects]]
+  digest = "1:f119cac9a949c6b52d957460a489e0a5f3157165fc1a943a2c9d3cb7aa287773"
+  name = "go.opencensus.io"
+  packages = [
+    ".",
+    "internal",
+    "trace",
+    "trace/internal",
+    "trace/tracestate",
+  ]
+  pruneopts = "T"
+  revision = "d835ff86be02193d324330acdb7d65546b05f814"
+  version = "v0.22.3"
 
 [[projects]]
   branch = "master"
@@ -279,6 +561,8 @@
     "http2",
     "http2/hpack",
     "idna",
+    "internal/timeseries",
+    "trace",
   ]
   pruneopts = "T"
   revision = "146acd28ed5894421fb5aac80ca93bc1b1f46f87"
@@ -293,6 +577,14 @@
   ]
   pruneopts = "T"
   revision = "c57b0facaced709681d9f90397429b9430a74754"
+
+[[projects]]
+  branch = "master"
+  digest = "1:b1ae6af58dd8e4eb2e79e8e83f713950f88a6a3f7ba25cb68feb151a69096597"
+  name = "golang.org/x/sync"
+  packages = ["errgroup"]
+  pruneopts = "T"
+  revision = "43a5402ce75a95522677f77c619865d66b8c57ab"
 
 [[projects]]
   branch = "master"
@@ -372,6 +664,108 @@
   pruneopts = "T"
   revision = "ae0ab99deb4dc413a2b4bd6c8bdd0eb67f1e4d06"
   version = "v1.2.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:d19224f750d669289aa9c645ad6fa7200ee5d829007aea4e8e1edb588a53b1c0"
+  name = "google.golang.org/genproto"
+  packages = ["googleapis/rpc/status"]
+  pruneopts = "T"
+  revision = "2bb8d6132df61c790c5ec29566b30b708123ae8a"
+
+[[projects]]
+  digest = "1:22d1701c135c97f54c29729e3b8a4b4dc6cf8a40553ddb799d3b76a6d87afbca"
+  name = "google.golang.org/grpc"
+  packages = [
+    ".",
+    "attributes",
+    "backoff",
+    "balancer",
+    "balancer/base",
+    "balancer/roundrobin",
+    "binarylog/grpc_binarylog_v1",
+    "codes",
+    "connectivity",
+    "credentials",
+    "credentials/internal",
+    "encoding",
+    "encoding/proto",
+    "grpclog",
+    "health",
+    "health/grpc_health_v1",
+    "internal",
+    "internal/backoff",
+    "internal/balancerload",
+    "internal/binarylog",
+    "internal/buffer",
+    "internal/channelz",
+    "internal/envconfig",
+    "internal/grpclog",
+    "internal/grpcrand",
+    "internal/grpcsync",
+    "internal/grpcutil",
+    "internal/resolver/dns",
+    "internal/resolver/passthrough",
+    "internal/status",
+    "internal/syscall",
+    "internal/transport",
+    "keepalive",
+    "metadata",
+    "naming",
+    "peer",
+    "resolver",
+    "serviceconfig",
+    "stats",
+    "status",
+    "tap",
+  ]
+  pruneopts = "T"
+  revision = "754ee590a4f386d0910d887f3b8776354042260b"
+  version = "v1.29.1"
+
+[[projects]]
+  digest = "1:df6ea573920e948eda668c605ff469e2cf44b3b3eb7b027d422376a510e8838a"
+  name = "google.golang.org/protobuf"
+  packages = [
+    "cmd/protoc-gen-go/internal_gengo",
+    "compiler/protogen",
+    "encoding/prototext",
+    "encoding/protowire",
+    "internal/descfmt",
+    "internal/descopts",
+    "internal/detrand",
+    "internal/encoding/defval",
+    "internal/encoding/messageset",
+    "internal/encoding/tag",
+    "internal/encoding/text",
+    "internal/errors",
+    "internal/fieldnum",
+    "internal/fieldsort",
+    "internal/filedesc",
+    "internal/filetype",
+    "internal/flags",
+    "internal/genname",
+    "internal/impl",
+    "internal/mapsort",
+    "internal/pragma",
+    "internal/set",
+    "internal/strs",
+    "internal/version",
+    "proto",
+    "reflect/protodesc",
+    "reflect/protoreflect",
+    "reflect/protoregistry",
+    "runtime/protoiface",
+    "runtime/protoimpl",
+    "types/descriptorpb",
+    "types/known/anypb",
+    "types/known/durationpb",
+    "types/known/timestamppb",
+    "types/pluginpb",
+  ]
+  pruneopts = "T"
+  revision = "5c3dd7024aed895adfe053f26b5a479e991cbca9"
+  version = "v1.24.0"
 
 [[projects]]
   digest = "1:2d1fbdc6777e5408cabeb02bf336305e724b925ff4546ded0fa8715a7267922a"
@@ -656,6 +1050,8 @@
     "github.com/cenkalti/backoff",
     "github.com/coreos/go-iptables/iptables",
     "github.com/davecgh/go-spew/spew",
+    "github.com/golang/protobuf/protoc-gen-go",
+    "github.com/gravitational/magnet",
     "github.com/gravitational/trace",
     "github.com/magefile/mage/mage",
     "github.com/magefile/mage/mg",

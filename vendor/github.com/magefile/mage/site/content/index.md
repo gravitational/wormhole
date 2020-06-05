@@ -13,7 +13,15 @@ and Mage automatically uses them as Makefile-like runnable targets.
 Mage has no dependencies outside the Go standard library, and builds with Go 1.7
 and above (possibly even lower versions, but they're not regularly tested). 
 
-Install mage by running 
+**Using Go Modules (Recommended)**
+
+```plain
+git clone https://github.com/magefile/mage
+cd mage
+go run bootstrap.go
+```
+
+**Using GOPATH**
 
 ```plain
 go get -u -d github.com/magefile/mage
@@ -33,6 +41,28 @@ The mage binary will be created in your $GOPATH/bin directory.
 
 You may also install a binary release from our
 [releases](https://github.com/magefile/mage/releases) page. 
+
+## Example Magefile
+
+```go
+//+build mage
+
+package main
+
+import (
+    "github.com/magefile/mage/sh"
+)
+
+// Runs go mod download and then installs the binary.
+func Build() error {
+    if err := sh.Run("go", "mod", "download"); err != nil {
+        return err
+    }
+    return sh.Run("go", "install", "./...")
+}
+```
+
+Run the above `Build` target by simply running `mage build` in the same directory as the magefile.
 
 ## Demo
 
@@ -59,24 +89,28 @@ Commands:
   -clean    clean out old generated binaries from CACHE_DIR
   -compile <string>
             output a static binary to the given path
+  -h        show this help
   -init     create a starting template if no mage files exist
   -l        list mage targets in this directory
-  -h        show this help
   -version  show version info for the mage binary
 
 Options:
   -d <string> 
-          run magefiles in the given directory (default ".")
-  -debug  turn on debug messages
-  -h      show description of a target
-  -f      force recreation of compiled magefile
-  -keep   keep intermediate mage files around after running
+            directory to read magefiles from (default ".")
+  -debug    turn on debug messages
+  -f        force recreation of compiled magefile
+  -goarch   sets the GOARCH for the binary created by -compile (default: current arch)
   -gocmd <string>
-          use the given go binary to compile the output (default: "go")
+		    use the given go binary to compile the output (default: "go")
+  -goos     sets the GOOS for the binary created by -compile (default: current OS)
+  -h        show description of a target
+  -keep     keep intermediate mage files around after running
   -t <string>
-          timeout in duration parsable format (e.g. 5m30s)
-  -v      show verbose output when running mage targets
-```
+            timeout in duration parsable format (e.g. 5m30s)
+  -v        show verbose output when running mage targets
+  -w <string>
+            working directory where magefiles will run (default -d value)
+  ```
 
 ## Why?
 
@@ -90,17 +124,6 @@ Windows.  Go is superior to bash for any non-trivial task involving branching, l
 that's not just straight line execution of commands.  And if your project is written in Go, why
 introduce another language as idiosyncratic as bash?  Why not use the language your contributors are
 already comfortable with?
-
-## Compiling a static binary
-
-If your tasks are not related to compiling Go code, it can be useful to compile a binary which has
-the mage execution runtime and the tasks compiled in such that it can be run on another machine
-without requiring installation of dependencies. To do so, pass the output path to the compile flag.
-like this:
-
-```plain
-$ mage -compile ./static-output
-```
 
 ## Code
 

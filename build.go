@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gravitational/magnet"
 	"github.com/gravitational/trace"
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
@@ -34,12 +35,13 @@ var (
 
 	// golangciVersion is the version of golangci-lint to use for linting
 	// https://github.com/golangci/golangci-lint/releases
-	golangciVersion = "v1.15.0"
+	golangciVersion = "v1.16.0"
 
 	// cniVersion is the version of cni plugin binaries to ship
 	cniVersion = "v0.7.5"
 
 	// registryImage is the docker tag to use to push the container to the requested registry
+	// defaults to test registry
 	registryImage = env("WORM_REGISTRY_IMAGE", "quay.io/gravitational/wormhole-dev")
 
 	// baseImage is the base OS image to use for wormhole containers
@@ -52,6 +54,8 @@ var (
 	// buildVersion allows override of the version string from env variable
 	buildVersion = env("WORM_BUILD_VERSION", "")
 )
+
+var root = magnet.Root()
 
 // env, loads a variable from the environment, or uses the provided default
 func env(env, d string) string {
@@ -71,10 +75,12 @@ func (Build) All() error {
 }
 
 // GoBuild builds go binaries
-func (Build) Go() error {
+func (Build) Go() (err error) {
 	mg.Deps(Build.BuildContainer)
-	fmt.Println("\n=====> Building Gravitational Wormhole Go Binary...\n")
-	start := time.Now()
+
+	m := root.Clone("build:go")
+	var cached bool
+	defer func() { m.Complete(cached, err) }()
 
 	updated, err := target.Dir("build/wormhole", "pkg", "cmd")
 	if err != nil {
@@ -82,13 +88,12 @@ func (Build) Go() error {
 	}
 
 	if !updated {
-		fmt.Println("Build up to date")
+		cached = true
 		return nil
 	}
-	err = trace.Wrap(sh.RunV(
+	_, err = m.Exec().Run(
 		"docker",
 		"run",
-		"-it",
 		"--rm=true",
 		fmt.Sprintf("--volume=%v:/go/src/github.com/gravitational/wormhole:delegated", srcDir()),
 		`--env="GOCACHE=/go/src/github.com/gravitational/wormhole/build/cache/go"`,
@@ -101,20 +106,20 @@ func (Build) Go() error {
 		"-o",
 		"/go/src/github.com/gravitational/wormhole/build/wormhole",
 		"github.com/gravitational/wormhole/cmd/wormhole",
-	))
-
-	elapsed := time.Since(start)
-	fmt.Println("Build completed in ", elapsed)
-
+	)
 	return trace.Wrap(err)
 }
 
 // Docker packages wormhole into a docker container
-func (Build) Docker() error {
+func (Build) Docker() (err error) {
 	mg.Deps(Build.Go)
-	fmt.Println("\n=====> Building Gravitational Wormhole Docker Image...\n")
 
-	return trace.Wrap(sh.RunV(
+	m := root.Clone("build:docker")
+	defer func() { m.Complete(false, err) }()
+
+	_, err = m.Exec().Env(map[string]string{
+		"DOCKER_BUILDKIT": "1",
+	}).Run(
 		"docker",
 		"build",
 		"--pull",
@@ -135,15 +140,19 @@ func (Build) Docker() error {
 		"-f",
 		"Dockerfile",
 		".",
-	))
+	)
+
+	return trace.Wrap(err)
 }
 
 // Publish tags and publishes the built container to the configured registry
-func (Build) Publish() error {
+func (Build) Publish() (err error) {
 	mg.Deps(Build.Docker)
-	fmt.Println("\n=====> Publishing Gravitational Wormhole Docker Image...\n")
 
-	err := sh.RunV(
+	m := root.Clone("build:publish")
+	defer func() { m.Complete(false, err) }()
+
+	_, err = m.Exec().Run(
 		"docker",
 		"tag",
 		fmt.Sprint("wormhole:", version()),
@@ -153,17 +162,22 @@ func (Build) Publish() error {
 		return trace.Wrap(err)
 	}
 
-	return trace.Wrap(sh.RunV(
+	_, err = m.Exec().Run(
 		"docker",
 		"push",
 		fmt.Sprint(registryImage, ":", version()),
-	))
+	)
+	return trace.Wrap(err)
 }
 
 // BuildContainer creates a docker container as a consistent golang environment to use for software builds
-func (Build) BuildContainer() error {
-	fmt.Println("\n=====> Creating build container...\n")
-	return trace.Wrap(sh.RunV(
+func (Build) BuildContainer() (err error) {
+	m := root.Clone("build:buildContainer")
+	defer func() { m.Complete(false, err) }()
+
+	_, err = m.Exec().Env(map[string]string{
+		"DOCKER_BUILDKIT": "1",
+	}).Run(
 		"docker",
 		"build",
 		"--pull",
@@ -176,7 +190,8 @@ func (Build) BuildContainer() error {
 		"-f",
 		"Dockerfile.build",
 		"./assets",
-	))
+	)
+	return trace.Wrap(err)
 }
 
 type Test mg.Namespace
@@ -188,14 +203,16 @@ func (Test) All() error {
 }
 
 // Unit runs unit tests with the race detector enabled
-func (Test) Unit() error {
+func (Test) Unit() (err error) {
 	mg.Deps(Build.BuildContainer)
-	fmt.Println("\n=====> Running Gravitational Wormhole Unit Tests...\n")
 
-	return trace.Wrap(sh.RunV(
+	m := root.Clone("test:unit")
+
+	m.Println("Running unit tests")
+
+	_, err = m.Exec().Run(
 		"docker",
 		"run",
-		"-it",
 		"--rm=true",
 		fmt.Sprintf("--volume=%v:/go/src/github.com/gravitational/wormhole", srcDir()),
 		`--env="GOCACHE=/go/src/github.com/gravitational/wormhole/build/cache/go"`,
@@ -206,47 +223,59 @@ func (Test) Unit() error {
 		"test",
 		"./...",
 		"-race",
-	))
+	)
+	m.Complete(false, err)
+	return
 }
 
 // Lint runs golangci linter against the repo
-func (Test) Lint() error {
+func (Test) Lint() (err error) {
 	mg.Deps(Build.BuildContainer)
-	fmt.Println("\n=====> Linting Gravitational Wormhole...\n")
 
-	return trace.Wrap(sh.RunV(
+	m := root.Clone("test:lint")
+	defer func() { m.Complete(false, err) }()
+
+	m.Printlnf("Running linters")
+
+	_, err = m.Exec().Run(
 		"docker",
 		"run",
-		"-it",
 		"--rm=true",
 		fmt.Sprintf("--volume=%v:/go/src/github.com/gravitational/wormhole", srcDir()),
 		`--env="GOCACHE=/go/src/github.com/gravitational/wormhole/build/cache/go"`,
 		fmt.Sprint("wormhole-build:", version()),
 		"bash",
 		"-c",
-		"cd /go/src/github.com/gravitational/wormhole; golangci-lint run --deadline=30m --enable-all"+
+		"cd /go/src/github.com/gravitational/wormhole && golangci-lint run --deadline=30m --enable-all"+
 			" -D gochecknoglobals -D gochecknoinits",
-	))
+	)
+
+	return trace.Wrap(err)
 }
 
 type CodeGen mg.Namespace
 
 // Update runs the code generator and updates the generated CRD client
-func (CodeGen) Update() error {
-	fmt.Println("\n=====> Running hack/update-codegen.sh...\n")
+func (CodeGen) Update() (err error) {
 
-	return trace.Wrap(sh.RunV(
+	m := root.Clone("codegen:update")
+	defer func() { m.Complete(false, err) }()
+
+	_, err = m.Exec().Run(
 		"hack/update-codegen.sh",
-	))
+	)
+	return trace.Wrap(err)
 }
 
 // Verify checks whether the code gen is up to date
-func (CodeGen) Verify() error {
-	fmt.Println("\n=====> Running hack/verify-codegen.sh...\n")
+func (CodeGen) Verify() (err error) {
+	m := root.Clone("codegen:verify")
+	defer func() { m.Complete(false, err) }()
 
-	return trace.Wrap(sh.RunV(
+	_, err = m.Exec().Run(
 		"hack/verify-codegen.sh",
-	))
+	)
+	return trace.Wrap(err)
 }
 
 func srcDir() string {

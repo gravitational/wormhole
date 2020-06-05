@@ -26,11 +26,34 @@
 
 required = [
   "github.com/magefile/mage/mage",
-  "k8s.io/code-generator/cmd/client-gen"
+  "k8s.io/code-generator/cmd/client-gen",
+  "github.com/golang/protobuf/protoc-gen-go",
 ]
 
 [prune]
   go-tests = true
+
+[[override]]
+  name = "github.com/magefile/mage"
+  revision = "4adc5568e96ddcd37eefca5ead057f61ff4f0103"
+  source = "github.com/knisbet/mage"
+
+[[override]]
+  version = "1.3.3"
+  name = "github.com/golang/protobuf"
+
+[[override]]
+  version = "1.3.1"
+  name = "github.com/gogo/protobuf"
+
+[[override]]
+  version = "v1.0.0"
+  name = "github.com/containerd/console"
+
+[[override]]
+  name = "github.com/jaguilar/vt100"
+  revision = "ad4c4a5743050fb7f88ce968dca9422f72a0e3f2"
+  source = "github.com/tonistiigi/vt100"
 
 [[constraint]]
   name = "github.com/vishvananda/netlink"

@@ -16,6 +16,7 @@ package controller
 import (
 	"testing"
 
+	"github.com/gravitational/trace"
 	"github.com/stretchr/testify/assert"
 
 	v1 "k8s.io/api/core/v1"
@@ -185,4 +186,8 @@ func TestPlanetConfigurationError(t *testing.T) {
 		_, err := parsePodSubnetFromPlanet([]byte(c.env))
 		assert.Error(t, err, c.description)
 	}
+}
+
+func TestForceFailure(t *testing.T) {
+	assert.NoError(t, trace.BadParameter("forced failure"))
 }

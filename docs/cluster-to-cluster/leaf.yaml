@@ -1,0 +1,122 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wg-cluster2-cluster1
+  namespace: wormhole
+  labels:
+    app: wg-cluster2-cluster1
+spec:
+  # Because we're sharing secrets, we should only deploy one replica, otherwise WireGuard
+  # will get confused
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: wg-cluster2-cluster1
+  template:
+    metadata:
+      labels:
+        k8s-app: wg-cluster2-cluster1
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+        seccomp.security.alpha.kubernetes.io/pod: docker/default
+    spec:
+      hostNetwork: false
+      # TODO: setup separate service account with minimum permissions
+      serviceAccountName: wormhole
+      # Short duration for rolling restarts
+      terminationGracePeriodSeconds: 5
+      selector:
+
+      nodeSelector:
+        beta.kubernetes.io/arch: amd64
+      tolerations:
+        # Tolerate all taints
+        - effect: NoSchedule
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+      priorityClassName: wormhole-high-priority
+      containers:
+        - name: wormhole
+          # Image can be pointed to wormhole image of local repository
+          # need to be careful with upgrades though
+          image: quay.io/gravitational/wormhole:0.3
+          command:
+            - bash
+          args:
+            - -c
+            - /etc/wg0/start.sh
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities:
+              drop:
+              - all
+              add: 
+              - NET_ADMIN
+              - NET_RAW
+              - CHOWN
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100M
+            limits:
+              cpu: 100m
+              memory: 100M
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmpfs
+            # Used for iptables lock
+            - mountPath: /run
+              name: run
+            - mountPath: /etc/wg0-private/
+              name: wg0-private
+              readOnly: true
+            - mountPath: /etc/wg0/
+              name: wg0-start
+              readOnly: true
+      volumes:
+        - name: tmpfs
+          emptyDir:
+            medium: Memory
+        - name: run
+          emptyDir:
+            medium: Memory
+        - name: wg0-private
+          secret:
+              secretName: wg-cluster1-cluster2-privatekey
+        - name: wg0-start
+          configMap:
+              name: wg-cluster1-cluster2-start
+              defaultMode: 448
+---
+# Service to create within local cluster, that when used will actually connect to the service
+# on the remote cluster. This example uses kube-dns as an example service.
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: wormhole
+  name: cluster1-kube-dns
+spec:
+  type: ClusterIP
+  selector:
+    k8s-app: wg-cluster2-cluster1
+  ports:
+    # cluster1 Kube-dns service
+    - name: dns-tcp
+      protocol: TCP
+      port: 53
+      targetPort: 53
+    - name: dns-udp
+      protocol: UDP
+      port: 53
+      targetPort: 53
