@@ -1,3 +1,12 @@
+# Support Notice
+
+**The Wormhole project is no longer under active development.** 
+The project's development has been limited to maintenance and support for our
+commercial customers until maintenance agreements expire.
+
+Please see our blog post for more information:
+https://goteleport.com/blog/gravitational-is-teleport/
+
 # Gravitational Wormhole
 Wormhole is a simple [CNI plugin](https://github.com/containernetworking/cni) designed to create an encrypted overlay network for [kubernetes](https://kubernetes.io) clusters.
 
